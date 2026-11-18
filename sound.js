@@ -67,6 +67,53 @@ export function playFanfare() {
   [523, 659, 784].forEach((f) => tone(f, 0.72, 0.6, "triangle", 0.1));
 }
 
+function noiseHit(t, vol, freq) {
+  const a = ac();
+  const src = a.createBufferSource(); src.buffer = noiseBuf;
+  const f = a.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq || 1800; f.Q.value = 0.8;
+  const g = a.createGain();
+  env(g, t, vol, 0.09);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.12);
+}
+
+// ドラムロール: だんだん速く・大きくなるスネアの連打
+export function playDrumroll(ms) {
+  if (!settings.se) return;
+  const a = ac();
+  const dur = (ms || 1200) / 1000;
+  const t0 = a.currentTime;
+  let t = 0, gap = 0.095;
+  let i = 0;
+  while (t < dur - 0.05) {
+    noiseHit(t0 + t, 0.10 + 0.22 * (t / dur), 1600);
+    t += gap;
+    gap = Math.max(0.034, gap * 0.94);
+    i++;
+  }
+}
+
+// ジャジャーン: 明るい和音を強く鳴らして余韻を残す
+export function playJajan() {
+  if (!settings.se) return;
+  const a = ac();
+  const t = a.currentTime;
+  const f = a.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 3200;
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.34, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+  f.connect(g); g.connect(master);
+  [261.63, 329.63, 392.0, 523.25, 659.25].forEach((fr) => {
+    [1, 1.004].forEach((m) => {
+      const osc = a.createOscillator();
+      osc.type = "sawtooth"; osc.frequency.value = fr * m;
+      osc.connect(f);
+      osc.start(t); osc.stop(t + 1.05);
+    });
+  });
+}
+
 // ===== BGMの楽器 =====
 function kick(t) {
   const a = ac();

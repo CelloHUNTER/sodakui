@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118j";
-import * as S from "./sound.js?v=20261118j";
+import { firebaseConfig } from "./firebase-config.js?v=20261118k";
+import * as S from "./sound.js?v=20261118k";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -606,7 +606,7 @@ async function finishRoom() {
     }
     await updateDoc(ref, { scored: true });
   }
-  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0 });
+  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false });
 }
 
 // ===== 結果発表（表彰台） =====
@@ -632,6 +632,7 @@ function renderPodium() {
     }
   });
   const btn = $("podiumBtn");
+  const done = step > ranks.length;
   if (step < ranks.length) {
     btn.classList.remove("hidden");
     btn.textContent = ranks[step] + "いの はっぴょう";
@@ -644,16 +645,56 @@ function renderPodium() {
     btn.classList.add("hidden");
     $("podiumMsg").textContent = "みんな おつかれさま！";
   }
+  // 4位以下は順位を付けず、同じ大きさのタイルで結果だけ並べる（発表が終わってから）
+  const others = $("othersArea");
+  if (done && sorted.length > 3) {
+    others.classList.remove("hidden");
+    others.innerHTML = "";
+    sorted.slice(3).forEach((p) => {
+      const d = document.createElement("div");
+      d.className = "otile";
+      d.innerHTML = "<div class='oname'>" + p.nickname + "</div><div class='opts'>" + (p.totalEarned || 0) + "点</div>";
+      others.appendChild(d);
+    });
+  } else {
+    others.classList.add("hidden");
+  }
+  // がんばりカードは発表が終わってから、先生のボタンで子どもの画面に出す
+  const cbtn = $("cardsBtn");
+  if (done && !room.cardsShown) {
+    cbtn.classList.remove("hidden");
+    cbtn.disabled = false;
+    cbtn.textContent = "がんばりカードを みせる";
+  } else if (done && room.cardsShown) {
+    cbtn.classList.remove("hidden");
+    cbtn.disabled = true;
+    cbtn.textContent = "カードを だしたよ";
+  } else {
+    cbtn.classList.add("hidden");
+  }
 }
+$("cardsBtn").addEventListener("click", async () => {
+  if (!room || room.status !== "finished") return;
+  await updateDoc(doc(db, "rooms", roomCode), { cardsShown: true });
+  S.playCorrect();
+});
+
 $("podiumBtn").addEventListener("click", async () => {
   if (!room || room.status !== "finished") return;
   if (S.currentBGM() !== "results") S.startBGM("results");
   const ranks = podiumRanks();
   const step = room.podium || 0;
+  const btn = $("podiumBtn");
   if (step < ranks.length) {
+    // ドラムロール → ジャジャーンと同時に名前が出る
+    btn.disabled = true;
+    btn.textContent = "……";
+    S.playDrumroll(1200);
+    await new Promise((r) => setTimeout(r, 1200));
     await updateDoc(doc(db, "rooms", roomCode), { podium: step + 1 });
-    if (ranks[step] === 1) { S.playCorrect(); launchConfetti(); }
-    else S.playJoin();
+    S.playJajan();
+    if (ranks[step] === 1) launchConfetti();
+    btn.disabled = false;
   } else if (step === ranks.length) {
     await updateDoc(doc(db, "rooms", roomCode), { podium: step + 1 });
     S.playCorrect();
