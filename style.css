@@ -1,5 +1,8 @@
 * { box-sizing: border-box; }
-body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff8ee; color: #333; }
+body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff8ee; background-image: radial-gradient(#ffd9a0 1.6px, transparent 1.7px); background-size: 22px 22px; color: #333; }
+body.bgok { background-color: #2a9d8f; background-image: none; }
+body.bgng { background-color: #f4a259; background-image: none; }
+body.bgmu { background-color: #adb5bd; background-image: none; }
 h1 { font-size: 26px; margin: 8px 0 16px; }
 h2 { font-size: 20px; margin: 20px 0 10px; }
 .wrap { max-width: 760px; margin: 0 auto; }
@@ -22,7 +25,11 @@ input, textarea, select { font-size: 18px; padding: 10px; border-radius: 10px; b
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-size: 17px; }
 .wide { max-width: 1000px; }
-.dchoice { font-size: 24px; padding: 26px 12px; border-radius: 18px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.dchoice { font-size: 24px; padding: 26px 12px; border-radius: 18px; color: #fff; display: flex; justify-content: space-between; align-items: center; position: relative; overflow: hidden; }
+.dchoice > span { position: relative; z-index: 1; }
+.dchoice > .barbg { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,255,255,.38); transition: width .7s ease; z-index: 0; }
+.dchoice.hinted { opacity: .25; filter: grayscale(1); }
+.choice.hinted { opacity: .25; filter: grayscale(1); }
 .dchoice.dim { opacity: .35; }
 .dchoice.correct { outline: 6px solid #ffd60a; opacity: 1; }
 .dcount { font-weight: bold; font-size: 26px; }
@@ -47,6 +54,17 @@ th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-siz
 .okbadge { background: #2a9d8f; color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 14px; }
 .testbtn { font-size: 16px; padding: 10px 16px; border-radius: 999px; background: #adb5bd; }
 .testbtn.on { background: #7b2cbf; }
+.chip.pop { animation: chipop .45s ease; }
+@keyframes chipop { 0% { transform: scale(.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.delta.up { color: #2a9d8f; font-weight: bold; }
+.delta.down { color: #adb5bd; }
+.rankrow.risen { background: #e6fcf5; }
+#confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 40; }
+.confetti { position: absolute; top: -20px; animation-name: confettifall; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes confettifall { to { transform: translateY(108vh) rotate(680deg); } }
+.cert { border: 5px solid #ffb703; background: linear-gradient(180deg, #ffffff, #fff6db); }
+.cert-title { font-size: 26px; font-weight: bold; color: #e07b00; margin: 6px 0; }
+.cert-rank { font-size: 44px; font-weight: bold; color: #c1121f; margin: 8px 0; }
 .note { color: #777; font-size: 14px; }
 .err { color: #c1121f; font-weight: bold; }
 .center { text-align: center; }
