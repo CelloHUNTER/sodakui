@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import { firebaseConfig } from "./firebase-config.js?v=20261118b";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -104,26 +104,34 @@ async function loadNicknames() {
 $("addNickBtn").addEventListener("click", async () => {
   const name = $("nickInput").value.trim();
   if (!name) return;
-  const ref = doc(db, "teachers", uid, "students", name);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    await updateDoc(ref, { active: true });
-  } else {
-    await setDoc(ref, { exp: 0, points: 0, plays: 0, active: true });
+  try {
+    const ref = doc(db, "teachers", uid, "students", name);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, { active: true });
+    } else {
+      await setDoc(ref, { exp: 0, points: 0, plays: 0, active: true });
+    }
+    $("nickInput").value = "";
+    $("nickMsg").textContent = name + " を追加しました";
+    await loadNicknames();
+  } catch (e) {
+    $("nickMsg").textContent = "追加できませんでした: " + (e.code || e.message);
   }
-  $("nickInput").value = "";
-  $("nickMsg").textContent = name + " を追加しました";
-  await loadNicknames();
 });
 
 $("delNickBtn").addEventListener("click", async () => {
   if (selectedNicks.size === 0) { $("nickMsg").textContent = "削除するニックネームを選んでください"; return; }
-  // 完全削除はせず、一覧から外すだけにする（育成記録は残る）
-  for (const n of selectedNicks) {
-    await updateDoc(doc(db, "teachers", uid, "students", n), { active: false });
+  try {
+    // 完全削除はせず、一覧から外すだけにする（育成記録は残る）
+    for (const n of selectedNicks) {
+      await updateDoc(doc(db, "teachers", uid, "students", n), { active: false });
+    }
+    $("nickMsg").textContent = selectedNicks.size + "人を一覧から外しました";
+    await loadNicknames();
+  } catch (e) {
+    $("nickMsg").textContent = "削除できませんでした: " + (e.code || e.message);
   }
-  $("nickMsg").textContent = selectedNicks.size + "人を一覧から外しました";
-  await loadNicknames();
 });
 
 function makeCode() {
