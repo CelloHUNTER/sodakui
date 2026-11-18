@@ -48,6 +48,30 @@
     <p>おおきい がめんを みてね</p>
   </div>
 
+  <div id="reviewListCard" class="card hidden">
+    <p class="big center">ふくしゅう</p>
+    <p class="center">クイズを えらんでね</p>
+    <div id="reviewQuizList"></div>
+  </div>
+
+  <div id="reviewQuizCard" class="card hidden">
+    <p class="note" id="rvProgress"></p>
+    <p class="qtext" id="rvText"></p>
+    <div class="choices" id="rvChoices"></div>
+    <div id="rvFeedback" class="hidden center">
+      <p id="rvMark" style="font-size:56px; margin:6px"></p>
+      <p id="rvMsg" class="big"></p>
+      <button id="rvNextBtn">つぎへ</button>
+    </div>
+  </div>
+
+  <div id="reviewDoneCard" class="card hidden center">
+    <p class="big">おつかれさま！</p>
+    <p id="rvResult" class="big"></p>
+    <p id="rvPoints"></p>
+    <button id="rvBackBtn">クイズいちらんに もどる</button>
+  </div>
+
   <div id="doneCard" class="card hidden center cert">
     <p class="cert-title">★ がんばりカード ★</p>
     <p id="certName" class="big"></p>
@@ -61,6 +85,6 @@
   <button id="seBtnChild" class="gray" style="margin-top:8px; width:100%">おと：オン</button>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./play.js?v=20261119a"></script>
+<script type="module" src="./play.js?v=20261119c"></script>
 </body>
 </html>

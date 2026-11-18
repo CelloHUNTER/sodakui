@@ -92,3 +92,8 @@
 ### セキュリティルール
 - 本番用ルールの下書きは firestore.rules、テストの下書きは tests/、移行手順は PRODUCTION.md
 - 開発プロジェクトは現在テストモード。本番使用前に必ず差し替えること
+
+### ふくしゅうモードと記録の詳細（2026-11-19追記）
+- ふくしゅう部屋：rooms に mode: "review" と quizzes（複数クイズの写し）を入れる。子どもは自分のペースで解き、答え合わせはその場で出る。そのため復習用の写しには答え（keys）を含める（本番モードでは従来通り答えを渡さない）。ポイントは正解1問2点、最初の完了1回だけ。採点と記録は先生の端末が行う
+- 進み具合は rooms/{roomCode}/review/{nickname}_{quizId}（answers, correctCount, done, scored）
+- 記録（records）には問題ごとの結果 detail（q, choice, correct）と区分 mode（live/review）を持ち、CSVには正答率と問題ごとの○×－を出す

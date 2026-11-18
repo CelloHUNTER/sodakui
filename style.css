@@ -90,3 +90,5 @@ button.mini { font-size: 14px; padding: 8px 12px; border-radius: 10px; }
 .note { color: #777; font-size: 14px; }
 .err { color: #c1121f; font-weight: bold; }
 .center { text-align: center; }
+.choices button.choice.correct { box-shadow: 0 0 0 6px #fff inset; filter: brightness(1.25); }
+.choices button.choice.dim { opacity: .35; }
