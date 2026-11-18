@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>そだクイ 第0段階 接続テスト</title>
+<style>
+  body { font-family: sans-serif; margin: 24px; text-align: center; background: #fff8ee; color: #333; }
+  h1 { font-size: 22px; }
+  #status { font-size: 18px; margin: 16px 0; padding: 12px; border-radius: 12px; background: #eee; }
+  #status.ok { background: #d8f3dc; }
+  #status.ng { background: #ffd6d6; }
+  #count { font-size: 96px; font-weight: bold; margin: 16px 0; }
+  button { font-size: 24px; padding: 20px 40px; border-radius: 16px; border: none; background: #ff9f45; color: #fff; }
+  button:disabled { background: #ccc; }
+  #log { font-size: 13px; color: #666; margin-top: 24px; white-space: pre-wrap; text-align: left; max-width: 640px; margin-left: auto; margin-right: auto; }
+</style>
+</head>
+<body>
+<h1>そだクイ 接続テスト</h1>
+<div id="status">接続中…</div>
+<div id="count">-</div>
+<button id="plus" disabled>＋1 する</button>
+<div id="log"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, doc, onSnapshot, setDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const statusEl = document.getElementById("status");
+const countEl = document.getElementById("count");
+const plusBtn = document.getElementById("plus");
+const logEl = document.getElementById("log");
+const log = (m) => { logEl.textContent += m + "\n"; };
+
+try {
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  await signInAnonymously(auth);
+  log("匿名ログイン OK");
+
+  const ref = doc(db, "stage0", "counter");
+  onSnapshot(ref, (snap) => {
+    const v = snap.exists() ? (snap.data().value ?? 0) : 0;
+    countEl.textContent = v;
+    statusEl.textContent = "接続 OK（他の画面と数字が連動すれば成功）";
+    statusEl.className = "ok";
+    plusBtn.disabled = false;
+  }, (err) => {
+    statusEl.textContent = "受信エラー: " + err.code;
+    statusEl.className = "ng";
+    log("onSnapshot error: " + err.message);
+  });
+
+  plusBtn.addEventListener("click", async () => {
+    try {
+      await setDoc(ref, { value: increment(1), updatedAt: Date.now() }, { merge: true });
+    } catch (err) {
+      log("書き込みエラー: " + err.code + " " + err.message);
+      statusEl.textContent = "書き込みエラー: " + err.code;
+      statusEl.className = "ng";
+    }
+  });
+} catch (err) {
+  statusEl.textContent = "接続エラー: " + (err.code || err.message);
+  statusEl.className = "ng";
+  log("init error: " + err.message);
+}
+</script>
+</body>
+</html>
