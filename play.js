@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118e";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js?v=20261118f";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -21,7 +21,18 @@ let revealAnim = { idx: -1, done: false }; // ポイント加算モーション�
 
 function show(id) {
   CARDS.forEach((c) => $(c).classList.toggle("hidden", c !== id));
+  $("exitBtn").classList.toggle("hidden", id === "codeCard");
 }
+
+$("exitBtn").addEventListener("click", async () => {
+  if (!confirm("へやを でますか？")) return;
+  try {
+    if (roomCode && nickname) await deleteDoc(doc(db, "rooms", roomCode, "players", nickname));
+  } catch (e) { /* 部屋が既に無い場合などは無視 */ }
+  localStorage.removeItem("sodakui_room");
+  localStorage.removeItem("sodakui_nickname");
+  location.reload();
+});
 
 async function enterRoom(code) {
   roomCode = code.toUpperCase();
