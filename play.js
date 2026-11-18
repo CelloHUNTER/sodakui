@@ -3,7 +3,8 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
+// 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
+const app = initializeApp(firebaseConfig, "child");
 const auth = getAuth(app);
 const db = getFirestore(app);
 
