@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118m";
-import * as S from "./sound.js?v=20261118m";
+import { firebaseConfig } from "./firebase-config.js?v=20261119a";
+import * as S from "./sound.js?v=20261119a";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -637,8 +637,8 @@ async function finishRoom() {
       await setDoc(doc(db, "teachers", uid, "students", p.nickname),
         { exp: increment(p.totalEarned || 0), points: increment(p.totalEarned || 0), plays: increment(1) }, { merge: true });
       await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + p.nickname), {
-        date: new Date().toISOString(), roomCode, quizId: room.quizId, nickname: p.nickname,
-        correctCount: p.correctCount || 0, totalCount: room.questions.length
+        date: new Date().toISOString(), roomCode, quizId: room.quizId, quizTitle: room.quizTitle || "", nickname: p.nickname,
+        correctCount: p.correctCount || 0, totalCount: room.questions.length, earned: p.totalEarned || 0
       });
     }
     await updateDoc(ref, { scored: true });
@@ -761,3 +761,42 @@ function launchConfetti() {
   }
   setTimeout(() => { layer.innerHTML = ""; }, 3200);
 }
+
+// ===== 記録の閲覧とCSV =====
+let recordsCache = [];
+$("recordsBtn").addEventListener("click", async () => {
+  const snap = await getDocs(collection(db, "teachers", uid, "records"));
+  recordsCache = snap.docs.map((d) => d.data()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const box = $("recordsList");
+  if (recordsCache.length === 0) {
+    box.innerHTML = "<p class='note'>まだ記録がありません</p>";
+    $("csvBtn").classList.add("hidden");
+    return;
+  }
+  box.innerHTML = "";
+  recordsCache.forEach((r) => {
+    const quiz = getQuizData(r.quizId);
+    const title = r.quizTitle || (quiz ? quiz.title : r.quizId);
+    const d = r.date ? new Date(r.date).toLocaleDateString("ja-JP") : "";
+    const p = document.createElement("p");
+    p.textContent = d + "　" + r.nickname + "　「" + title + "」　" + r.correctCount + " / " + r.totalCount + " 問正解" +
+      (r.earned != null ? "　+" + r.earned + "点" : "");
+    box.appendChild(p);
+  });
+  $("csvBtn").classList.remove("hidden");
+});
+$("csvBtn").addEventListener("click", () => {
+  const head = "日付,ニックネーム,クイズ,正解数,問題数,獲得ポイント\n";
+  const lines = recordsCache.map((r) => {
+    const quiz = getQuizData(r.quizId);
+    const title = (r.quizTitle || (quiz ? quiz.title : r.quizId) || "").replace(/,/g, "、");
+    const d = r.date ? new Date(r.date).toLocaleDateString("ja-JP") : "";
+    return [d, r.nickname, title, r.correctCount, r.totalCount, r.earned != null ? r.earned : ""].join(",");
+  });
+  const blob = new Blob(["\uFEFF" + head + lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "sodakui_records.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
