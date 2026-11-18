@@ -93,8 +93,8 @@ function render() {
   if (room.phase === "reveal") {
     const mine = myChoices[idx];
     const correct = mine !== undefined && mine === room.answerIndex;
-    $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "×";
-    $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "ざんねん…";
+    $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "！";
+    $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "おしい！";
     $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
     $("revealPoints").textContent = me && me.lastEarned !== undefined
       ? "この もんだいで " + me.lastEarned + " ポイント（ごうけい " + (me.totalEarned || 0) + "）" : "";
