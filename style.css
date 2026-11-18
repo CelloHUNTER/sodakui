@@ -78,6 +78,15 @@ th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-siz
 .cert { border: 5px solid #ffb703; background: linear-gradient(180deg, #ffffff, #fff6db); }
 .cert-title { font-size: 26px; font-weight: bold; color: #e07b00; margin: 6px 0; }
 .cert-rank { font-size: 44px; font-weight: bold; color: #c1121f; margin: 8px 0; }
+button.mini { font-size: 14px; padding: 8px 12px; border-radius: 10px; }
+.ansbtn { background: #adb5bd; }
+.ansbtn.on { background: #2a9d8f; }
+.cdot { font-size: 22px; font-weight: bold; }
+.cdot.c0 { color: #e63946; } .cdot.c1 { color: #457b9d; } .cdot.c2 { color: #2a9d8f; } .cdot.c3 { color: #e9c46a; }
+.qedit { border: 2px solid #ffe1a8; }
+.qedit label { display: block; font-size: 14px; color: #666; margin-top: 10px; }
+.choicerow { margin: 6px 0; }
+.titlecard { font-size: 52px; font-weight: bold; margin: 48px 0 28px; }
 .note { color: #777; font-size: 14px; }
 .err { color: #c1121f; font-weight: bold; }
 .center { text-align: center; }

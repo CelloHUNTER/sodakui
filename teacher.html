@@ -53,6 +53,7 @@
         <select id="quizSelect" style="flex:1"></select>
         <button id="createRoomBtn">部屋を作る</button>
       </div>
+      <p><a href="./editor.html"><button class="sub" type="button">クイズを作る・編集する</button></a></p>
     </div>
 
     <div class="card hidden" id="roomCard">
@@ -68,6 +69,11 @@
 
       <div id="displayArea" class="hidden">
         <p class="note" id="dProgress"></p>
+        <div id="titleArea" class="hidden center">
+          <p id="dTitleText" class="titlecard"></p>
+          <button id="showBtn">問題を出す</button>
+        </div>
+        <div id="questionArea">
         <p class="qtext" id="dText" style="font-size:36px"></p>
         <div class="choices" id="dChoices"></div>
         <p id="dAnswer" class="big center hidden" style="color:#2a9d8f"></p>
@@ -76,6 +82,7 @@
           <button id="revealBtn">答え合わせ</button>
           <button id="hintBtn" class="sub hidden">ヒント（2つ消す）</button>
           <button id="nextBtn" class="sub hidden">つぎの問題へ</button>
+        </div>
         </div>
         <div id="rankingArea" class="hidden">
           <h2>順位</h2>
@@ -124,6 +131,6 @@
   </div>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./teacher.js?v=20261118l"></script>
+<script type="module" src="./teacher.js?v=20261118m"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118l";
-import * as S from "./sound.js?v=20261118l";
+import { firebaseConfig } from "./firebase-config.js?v=20261118m";
+import * as S from "./sound.js?v=20261118m";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -50,11 +50,29 @@ let prevStatus = null;
 let prevPlayerCount = 0;
 
 const quizSelect = $("quizSelect");
-SAMPLE_QUIZZES.forEach((q, i) => {
-  const opt = document.createElement("option");
-  opt.value = i; opt.textContent = q.title;
-  quizSelect.appendChild(opt);
-});
+let quizCache = {}; // 自分のクイズ（id -> クイズ本体、答え含む）
+function getQuizData(id) {
+  return SAMPLE_QUIZZES.find((q) => q.id === id) || quizCache[id] || null;
+}
+async function loadQuizSelect() {
+  quizSelect.innerHTML = "";
+  SAMPLE_QUIZZES.forEach((q) => {
+    const opt = document.createElement("option");
+    opt.value = q.id; opt.textContent = q.title;
+    quizSelect.appendChild(opt);
+  });
+  quizCache = {};
+  if (!uid) return;
+  const snap = await getDocs(collection(db, "teachers", uid, "quizzes"));
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    if (data.archived) return;
+    quizCache[d.id] = { id: d.id, ...data };
+    const opt = document.createElement("option");
+    opt.value = d.id; opt.textContent = data.title;
+    quizSelect.appendChild(opt);
+  });
+}
 
 $("loginBtn").addEventListener("click", async () => {
   $("loginErr").textContent = "";
@@ -104,6 +122,7 @@ onAuthStateChanged(auth, async (user) => {
     $("mainArea").classList.remove("hidden");
     $("whoami").textContent = user.email;
     await loadNicknames();
+    await loadQuizSelect();
     await loadResumableRooms();
   } else {
     uid = null;
@@ -222,14 +241,19 @@ function makeCode() {
 }
 
 $("createRoomBtn").addEventListener("click", async () => {
-  const quiz = SAMPLE_QUIZZES[Number(quizSelect.value)];
+  let quiz = getQuizData(quizSelect.value);
+  if (!quiz && uid) {
+    const d = await getDoc(doc(db, "teachers", uid, "quizzes", quizSelect.value));
+    if (d.exists()) { quiz = { id: d.id, ...d.data() }; quizCache[d.id] = quiz; }
+  }
+  if (!quiz) { alert("クイズが選ばれていません"); return; }
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
   const roster = snap.docs.filter((d) => d.data().active !== false && d.data().participating !== false).map((d) => d.id).sort();
   if (roster.length === 0) { alert("先にニックネームを登録してください"); return; }
   roomCode = makeCode();
   await setDoc(doc(db, "rooms", roomCode), {
     teacherId: uid, quizId: quiz.id, quizTitle: quiz.title,
-    questions: quiz.questions.map((q) => ({ text: q.text, choices: q.choices })),
+    questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices })),
     roster, status: "waiting", phase: "lobby", currentIndex: 0,
     answerIndex: null, scoredQ: [], scored: false, createdAt: Date.now()
   });
@@ -325,7 +349,7 @@ function watchRoom() {
         setTimeout(() => {
           if (playersCache.some((p) => p.lastCorrect)) S.playCorrect(); else S.playOshii();
         }, 350);
-      } else if (room.phase === "question" && room.status === "playing") {
+      } else if ((room.phase === "question" || room.phase === "title") && room.status === "playing") {
         S.startBGM("question");
       }
     }
@@ -396,6 +420,14 @@ function renderDisplay() {
   const idx = room.currentIndex;
   const q = room.questions[idx];
   $("dProgress").textContent = (idx + 1) + " / " + room.questions.length + " もんめ　「" + room.quizTitle + "」";
+  const isTitle = room.phase === "title";
+  $("titleArea").classList.toggle("hidden", !isTitle);
+  $("questionArea").classList.toggle("hidden", isTitle);
+  if (isTitle) {
+    $("dTitleText").textContent = q.title || "問題" + (idx + 1);
+    renderChips();
+    return;
+  }
   $("dText").textContent = q.text;
   const box = $("dChoices");
   box.innerHTML = "";
@@ -532,7 +564,7 @@ async function reveal() {
   revealing = true;
   try {
     const idx = room.currentIndex;
-    const quiz = SAMPLE_QUIZZES.find((q) => q.id === room.quizId);
+    const quiz = getQuizData(room.quizId);
     const answerIndex = quiz.questions[idx].answer;
     const fresh = (await getDoc(doc(db, "rooms", roomCode))).data();
     if (!(fresh.scoredQ || []).includes(idx)) {
@@ -564,13 +596,18 @@ async function reveal() {
 $("revealBtn").addEventListener("click", reveal);
 
 $("startBtn").addEventListener("click", async () => {
-  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", phase: "question", currentIndex: 0, hint: null });
+  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", phase: "title", currentIndex: 0, hint: null });
   S.startBGM("question");
+});
+
+$("showBtn").addEventListener("click", async () => {
+  if (!room || room.phase !== "title") return;
+  await updateDoc(doc(db, "rooms", roomCode), { phase: "question" });
 });
 
 $("hintBtn").addEventListener("click", async () => {
   if (!room || room.phase !== "question") return;
-  const quiz = SAMPLE_QUIZZES.find((q) => q.id === room.quizId);
+  const quiz = getQuizData(room.quizId);
   if (!quiz) return;
   const idx = room.currentIndex;
   const ans = quiz.questions[idx].answer;
@@ -584,7 +621,7 @@ $("hintBtn").addEventListener("click", async () => {
 $("nextBtn").addEventListener("click", async () => {
   const idx = room.currentIndex;
   if (idx < room.questions.length - 1) {
-    await updateDoc(doc(db, "rooms", roomCode), { phase: "question", currentIndex: idx + 1, answerIndex: null, hint: null });
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "title", currentIndex: idx + 1, answerIndex: null, hint: null });
   } else {
     await finishRoom();
   }
