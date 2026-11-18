@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118h";
-import * as S from "./sound.js?v=20261118h";
+import { firebaseConfig } from "./firebase-config.js?v=20261118i";
+import * as S from "./sound.js?v=20261118i";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
