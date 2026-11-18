@@ -38,6 +38,13 @@ th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-siz
 .partbtn { font-size: 16px; padding: 10px 16px; border-radius: 999px; background: #adb5bd; }
 .partbtn.on { background: #2a9d8f; }
 .nickbtn.test { background: #d0bfff; }
+.nick.taken { background: #ced4da; color: #868e96; opacity: .65; }
+.popup { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.popup.hidden { display: none; }
+.pluspop { display: inline-block; font-size: 40px; font-weight: bold; color: #2a9d8f; animation: pop .5s ease; }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+.plusbadge { color: #2a9d8f; font-weight: bold; }
+.okbadge { background: #2a9d8f; color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 14px; }
 .testbtn { font-size: 16px; padding: 10px 16px; border-radius: 999px; background: #adb5bd; }
 .testbtn.on { background: #7b2cbf; }
 .note { color: #777; font-size: 14px; }
