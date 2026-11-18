@@ -8,7 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap wide">
   <h1>そだクイ 先生画面</h1>
 
   <div id="loginCard" class="card">
@@ -28,37 +28,50 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="setupCard">
       <h2>ニックネーム登録</h2>
       <p class="note">子どものニックネームを1行に1つずつ書いて保存してください。本名は入れないでください。</p>
       <textarea id="nicknames" rows="6" placeholder="れん&#10;そら&#10;ひな"></textarea>
       <button id="saveNickBtn">保存する</button>
       <span id="nickMsg"></span>
-    </div>
-
-    <div class="card">
       <h2>部屋を作る</h2>
       <div class="row">
         <select id="quizSelect" style="flex:1"></select>
         <button id="createRoomBtn">部屋を作る</button>
       </div>
-      <div id="roomInfo" class="hidden">
+    </div>
+
+    <div class="card hidden" id="roomCard">
+      <div id="lobbyArea">
         <p class="center">子どもはこのコードを入れるか、QRを読みます</p>
         <div class="code" id="roomCode"></div>
         <div id="qrcode" class="center" style="margin:12px auto; width:200px"></div>
         <p class="center note" id="roomUrl"></p>
         <div class="row" style="justify-content:center">
           <button id="startBtn">クイズをはじめる</button>
-          <button id="nextBtn" class="sub" disabled>つぎの問題へ</button>
-          <button id="finishBtn" class="gray">おわる（結果を出す）</button>
         </div>
-        <p id="roomStatus" class="center big"></p>
       </div>
-    </div>
 
-    <div class="card">
-      <h2>参加と回答の様子</h2>
-      <div id="playersTable">部屋を作ると、ここに表示されます。</div>
+      <div id="displayArea" class="hidden">
+        <p class="note" id="dProgress"></p>
+        <p class="qtext" id="dText" style="font-size:36px"></p>
+        <div class="choices" id="dChoices"></div>
+        <p class="center big" id="dCount"></p>
+        <div class="row" style="justify-content:center">
+          <button id="revealBtn">答え合わせ</button>
+          <button id="nextBtn" class="sub hidden">つぎの問題へ</button>
+        </div>
+        <div id="rankingArea" class="hidden">
+          <h2>順位</h2>
+          <div id="rankingList"></div>
+        </div>
+      </div>
+
+      <div id="chipsArea">
+        <h2>みんな</h2>
+        <div id="chips" class="chips"></div>
+        <p class="note" id="chipsNote"></p>
+      </div>
     </div>
   </div>
 </div>

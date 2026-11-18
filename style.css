@@ -21,6 +21,16 @@ input, textarea, select { font-size: 18px; padding: 10px; border-radius: 10px; b
 .nick { font-size: 22px; padding: 22px 8px; background: #ffb703; color: #333; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-size: 17px; }
+.wide { max-width: 1000px; }
+.dchoice { font-size: 24px; padding: 26px 12px; border-radius: 18px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.dchoice.dim { opacity: .35; }
+.dchoice.correct { outline: 6px solid #ffd60a; opacity: 1; }
+.dcount { font-weight: bold; font-size: 26px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { font-size: 20px; padding: 12px 18px; border-radius: 999px; background: #e9ecef; color: #666; }
+.chip.joined { background: #8ecae6; color: #fff; }
+.chip.answered { background: #2a9d8f; color: #fff; }
+.rankrow { display: flex; justify-content: space-between; font-size: 20px; padding: 8px 4px; border-bottom: 1px solid #eee; }
 .note { color: #777; font-size: 14px; }
 .err { color: #c1121f; font-weight: bold; }
 .center { text-align: center; }

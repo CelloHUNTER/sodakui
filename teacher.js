@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
-const POINTS_JOIN_PER_QUESTION = 2; // 回答するごとに付く参加ポイント
-const POINTS_CORRECT = 8;           // 正解ボーナス（経験値も同数）
+const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
+const POINTS_CORRECT = 8; // 正解ボーナス（経験値も同数）
 
 const SAMPLE_QUIZZES = [
   {
@@ -29,16 +29,19 @@ const SAMPLE_QUIZZES = [
     ]
   }
 ];
+const SYMBOLS = ["●", "▲", "■", "◆"];
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
 const $ = (id) => document.getElementById(id);
+
 let uid = null;
 let roomCode = null;
-let unsubRoom = null, unsubPlayers = null, unsubAnswers = null;
+let room = null;
+let playersCache = [];
 let answersCache = [];
+let revealing = false;
 
 const quizSelect = $("quizSelect");
 SAMPLE_QUIZZES.forEach((q, i) => {
@@ -62,7 +65,6 @@ onAuthStateChanged(auth, async (user) => {
   if (user && user.isAnonymous) user = null;
   if (user) {
     uid = user.uid;
-    // 先生の許可リストに自分のドキュメントを用意する（開発段階の便宜。本番ルールでは管理者のみ作成可にする）
     const ref = doc(db, "teachers", uid);
     if (!(await getDoc(ref)).exists()) {
       await setDoc(ref, { displayName: user.email, createdAt: Date.now() });
@@ -80,8 +82,7 @@ onAuthStateChanged(auth, async (user) => {
 
 async function loadNicknames() {
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  const names = snap.docs.map((d) => d.id).sort();
-  $("nicknames").value = names.join("\n");
+  $("nicknames").value = snap.docs.map((d) => d.id).sort().join("\n");
 }
 
 $("saveNickBtn").addEventListener("click", async () => {
@@ -105,92 +106,193 @@ $("createRoomBtn").addEventListener("click", async () => {
   const roster = snap.docs.map((d) => d.id).sort();
   if (roster.length === 0) { alert("先にニックネームを登録してください"); return; }
   roomCode = makeCode();
-  const publicQuestions = quiz.questions.map((q) => ({ text: q.text, choices: q.choices }));
   await setDoc(doc(db, "rooms", roomCode), {
     teacherId: uid, quizId: quiz.id, quizTitle: quiz.title,
-    questions: publicQuestions, roster,
-    status: "waiting", currentIndex: 0, scored: false, createdAt: Date.now()
+    questions: quiz.questions.map((q) => ({ text: q.text, choices: q.choices })),
+    roster, status: "waiting", phase: "lobby", currentIndex: 0,
+    answerIndex: null, scoredQ: [], scored: false, createdAt: Date.now()
   });
-  $("roomInfo").classList.remove("hidden");
+  $("setupCard").classList.add("hidden");
+  $("roomCard").classList.remove("hidden");
   $("roomCode").textContent = roomCode;
   const url = new URL("./play.html", location.href);
   url.searchParams.set("room", roomCode);
   $("roomUrl").textContent = url.toString();
   $("qrcode").innerHTML = "";
   new QRCode($("qrcode"), { text: url.toString(), width: 200, height: 200 });
-  $("roomStatus").textContent = "子どもが入るのを待っています";
   watchRoom();
 });
 
 function watchRoom() {
-  if (unsubRoom) unsubRoom();
-  if (unsubPlayers) unsubPlayers();
-  if (unsubAnswers) unsubAnswers();
-  unsubRoom = onSnapshot(doc(db, "rooms", roomCode), (snap) => {
+  onSnapshot(doc(db, "rooms", roomCode), (snap) => {
     if (!snap.exists()) return;
-    const r = snap.data();
-    const label = r.status === "waiting" ? "待機中" : r.status === "playing" ? (r.currentIndex + 1) + "問目 / " + r.questions.length + "問中" : "終了";
-    $("roomStatus").textContent = "状態: " + label;
-    $("nextBtn").disabled = !(r.status === "playing" && r.currentIndex < r.questions.length - 1);
+    room = snap.data();
+    renderDisplay();
   });
-  unsubPlayers = onSnapshot(collection(db, "rooms", roomCode, "players"), (snap) => {
+  onSnapshot(collection(db, "rooms", roomCode, "players"), (snap) => {
     playersCache = snap.docs.map((d) => ({ nickname: d.id, ...d.data() }));
-    renderPlayers();
+    renderChips(); renderRanking();
   });
-  unsubAnswers = onSnapshot(collection(db, "rooms", roomCode, "answers"), (snap) => {
+  onSnapshot(collection(db, "rooms", roomCode, "answers"), (snap) => {
     answersCache = snap.docs.map((d) => d.data());
-    renderPlayers();
+    renderChips(); renderDisplayCounts();
+    maybeAutoReveal();
   });
 }
 
-let playersCache = [];
-function renderPlayers() {
-  if (!roomCode) return;
-  const el = $("playersTable");
-  if (playersCache.length === 0) { el.textContent = "まだ誰も入っていません。"; return; }
-  let html = "<table><tr><th>ニックネーム</th><th>回答数</th><th>正解</th><th>獲得ポイント</th></tr>";
-  for (const p of playersCache) {
-    const mine = answersCache.filter((a) => a.nickname === p.nickname);
-    html += "<tr><td>" + p.nickname + "</td><td>" + mine.length + "</td><td>" +
-      (p.correct === undefined || p.correct === null ? "-" : p.correct) + "</td><td>" +
-      (p.earned === undefined || p.earned === null ? "-" : p.earned) + "</td></tr>";
-  }
-  el.innerHTML = html + "</table>";
+function currentAnswers() {
+  if (!room) return [];
+  return answersCache.filter((a) => a.q === room.currentIndex);
 }
 
-$("startBtn").addEventListener("click", async () => {
-  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", currentIndex: 0 });
-});
-$("nextBtn").addEventListener("click", async () => {
-  const ref = doc(db, "rooms", roomCode);
-  const snap = await getDoc(ref);
-  await updateDoc(ref, { currentIndex: snap.data().currentIndex + 1 });
-});
-$("finishBtn").addEventListener("click", async () => {
-  const ref = doc(db, "rooms", roomCode);
-  const room = (await getDoc(ref)).data();
-  if (room.scored) { alert("すでに結果を出しています"); return; }
-  const quiz = SAMPLE_QUIZZES.find((q) => q.id === room.quizId);
-  const answersSnap = await getDocs(collection(db, "rooms", roomCode, "answers"));
-  const playersSnap = await getDocs(collection(db, "rooms", roomCode, "players"));
-  const byNick = {};
-  answersSnap.forEach((d) => {
-    const a = d.data();
-    byNick[a.nickname] = byNick[a.nickname] || { answered: 0, correct: 0 };
-    byNick[a.nickname].answered++;
-    if (quiz.questions[a.q] && quiz.questions[a.q].answer === a.choice) byNick[a.nickname].correct++;
+function renderChips() {
+  if (!room) return;
+  const box = $("chips");
+  box.innerHTML = "";
+  const answered = new Set(currentAnswers().map((a) => a.nickname));
+  const joined = new Set(playersCache.map((p) => p.nickname));
+  room.roster.forEach((n) => {
+    const d = document.createElement("div");
+    d.className = "chip";
+    if (room.phase === "question" || room.phase === "reveal") {
+      if (answered.has(n)) d.classList.add("answered");
+      d.textContent = n;
+    } else {
+      if (joined.has(n)) d.classList.add("joined");
+      d.textContent = n;
+    }
+    box.appendChild(d);
   });
-  for (const p of playersSnap.docs) {
-    const nick = p.id;
-    const s = byNick[nick] || { answered: 0, correct: 0 };
-    const earned = s.answered * POINTS_JOIN_PER_QUESTION + s.correct * POINTS_CORRECT;
-    await updateDoc(doc(db, "rooms", roomCode, "players", nick), { correct: s.correct, answered: s.answered, earned });
-    await setDoc(doc(db, "teachers", uid, "students", nick), { exp: increment(earned), points: increment(earned), plays: increment(1) }, { merge: true });
-    await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + nick), {
-      date: new Date().toISOString(), roomCode, quizId: room.quizId, nickname: nick,
-      correctCount: s.correct, totalCount: room.questions.length
+  $("chipsNote").textContent =
+    room.phase === "question" ? "色が変わった子が、答えた子です" :
+    room.status === "waiting" ? "色が変わった子が、入れた子です" : "";
+}
+
+function renderDisplay() {
+  if (!room) return;
+  const inGame = room.status === "playing" || room.status === "finished";
+  $("lobbyArea").classList.toggle("hidden", inGame);
+  $("displayArea").classList.toggle("hidden", !inGame);
+  if (!inGame) { renderChips(); return; }
+  const idx = room.currentIndex;
+  const q = room.questions[idx];
+  $("dProgress").textContent = (idx + 1) + " / " + room.questions.length + " もんめ　「" + room.quizTitle + "」";
+  $("dText").textContent = q.text;
+  const box = $("dChoices");
+  box.innerHTML = "";
+  q.choices.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.className = "dchoice c" + i;
+    if (room.phase === "reveal") {
+      if (i === room.answerIndex) d.classList.add("correct");
+      else d.classList.add("dim");
+    }
+    d.innerHTML = "<span>" + SYMBOLS[i] + " " + c + "</span><span class='dcount' id='dc" + i + "'></span>";
+    box.appendChild(d);
+  });
+  $("revealBtn").classList.toggle("hidden", room.phase !== "question");
+  const isLast = idx >= room.questions.length - 1;
+  $("nextBtn").classList.toggle("hidden", room.phase !== "reveal");
+  $("nextBtn").textContent = isLast ? "結果発表へ" : "つぎの問題へ";
+  renderDisplayCounts();
+  renderRanking();
+  renderChips();
+}
+
+function renderDisplayCounts() {
+  if (!room || room.status === "waiting") return;
+  const ans = currentAnswers();
+  $("dCount").textContent = room.phase === "reveal" ? "" : ans.length + " 人が答えました";
+  if (room.phase === "reveal") {
+    room.questions[room.currentIndex].choices.forEach((_, i) => {
+      const el = $("dc" + i);
+      if (el) el.textContent = ans.filter((a) => a.choice === i).length + "人";
     });
   }
-  await updateDoc(ref, { status: "finished", scored: true });
-  $("roomStatus").textContent = "結果を出しました";
+}
+
+function renderRanking() {
+  const area = $("rankingArea");
+  if (!room || (room.phase !== "reveal" && room.status !== "finished")) {
+    area.classList.add("hidden");
+    return;
+  }
+  area.classList.remove("hidden");
+  const sorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+  $("rankingList").innerHTML = sorted.map((p, i) =>
+    "<div class='rankrow'><span>" + (i + 1) + "位　" + p.nickname + "</span><span>" +
+    (p.correctCount || 0) + "問正解・" + (p.totalEarned || 0) + "点</span></div>").join("");
+}
+
+function maybeAutoReveal() {
+  if (!room || room.phase !== "question" || revealing) return;
+  if (playersCache.length === 0) return;
+  const answered = new Set(currentAnswers().map((a) => a.nickname));
+  if (playersCache.every((p) => answered.has(p.nickname))) reveal();
+}
+
+async function reveal() {
+  if (!room || room.phase !== "question" || revealing) return;
+  revealing = true;
+  try {
+    const idx = room.currentIndex;
+    const quiz = SAMPLE_QUIZZES.find((q) => q.id === room.quizId);
+    const answerIndex = quiz.questions[idx].answer;
+    const fresh = (await getDoc(doc(db, "rooms", roomCode))).data();
+    if (!(fresh.scoredQ || []).includes(idx)) {
+      const ansSnap = await getDocs(collection(db, "rooms", roomCode, "answers"));
+      const byNick = {};
+      ansSnap.forEach((d) => {
+        const a = d.data();
+        if (a.q === idx) byNick[a.nickname] = a.choice;
+      });
+      for (const p of playersCache) {
+        const choice = byNick[p.nickname];
+        const answered = choice !== undefined;
+        const correct = answered && choice === answerIndex;
+        const earned = (answered ? POINTS_JOIN : 0) + (correct ? POINTS_CORRECT : 0);
+        await updateDoc(doc(db, "rooms", roomCode, "players", p.nickname), {
+          totalEarned: increment(earned),
+          correctCount: increment(correct ? 1 : 0),
+          lastEarned: earned, lastCorrect: correct
+        });
+      }
+      await updateDoc(doc(db, "rooms", roomCode), { scoredQ: arrayUnion(idx) });
+    }
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "reveal", answerIndex });
+  } finally {
+    revealing = false;
+  }
+}
+
+$("revealBtn").addEventListener("click", reveal);
+
+$("startBtn").addEventListener("click", async () => {
+  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", phase: "question", currentIndex: 0 });
 });
+
+$("nextBtn").addEventListener("click", async () => {
+  const idx = room.currentIndex;
+  if (idx < room.questions.length - 1) {
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "question", currentIndex: idx + 1, answerIndex: null });
+  } else {
+    await finishRoom();
+  }
+});
+
+async function finishRoom() {
+  const ref = doc(db, "rooms", roomCode);
+  const fresh = (await getDoc(ref)).data();
+  if (!fresh.scored) {
+    for (const p of playersCache) {
+      await setDoc(doc(db, "teachers", uid, "students", p.nickname),
+        { exp: increment(p.totalEarned || 0), points: increment(p.totalEarned || 0), plays: increment(1) }, { merge: true });
+      await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + p.nickname), {
+        date: new Date().toISOString(), roomCode, quizId: room.quizId, nickname: p.nickname,
+        correctCount: p.correctCount || 0, totalCount: room.questions.length
+      });
+    }
+    await updateDoc(ref, { scored: true });
+  }
+  await updateDoc(ref, { status: "finished", phase: "reveal" });
+}
