@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118k";
-import * as S from "./sound.js?v=20261118k";
+import { firebaseConfig } from "./firebase-config.js?v=20261118l";
+import * as S from "./sound.js?v=20261118l";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
