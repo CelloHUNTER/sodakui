@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>そだクイ クイズ編集</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>そだクイ クイズ編集</h1>
+  <p id="authMsg">読み込み中…</p>
+
+  <div id="listView" class="hidden">
+    <div class="row">
+      <button id="newQuizBtn">＋ あたらしいクイズ</button>
+      <a href="./teacher.html"><button class="gray" type="button">先生画面にもどる</button></a>
+    </div>
+    <div id="quizList"></div>
+  </div>
+
+  <div id="editView" class="hidden">
+    <label>クイズのタイトル</label>
+    <input id="quizTitle" placeholder="例：ことばクイズ 11月">
+    <div id="questionsBox"></div>
+    <div class="row">
+      <button id="addQBtn" class="sub">＋ 問題を追加</button>
+      <button id="previewBtn" class="gray" type="button">子ども側プレビュー</button>
+    </div>
+    <div id="previewBox" class="card hidden">
+      <p class="note">子ども側の見え方</p>
+      <div class="row" id="previewNav"></div>
+      <p id="pvTitle" class="center big"></p>
+      <p id="pvText" class="qtext"></p>
+      <div id="pvChoices" class="choices"></div>
+    </div>
+    <p id="saveMsg"></p>
+    <div class="row">
+      <button id="saveBtn">保存する</button>
+      <button id="backBtn" class="gray" type="button">一覧にもどる</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="./editor.js?v=20261118m"></script>
+</body>
+</html>
