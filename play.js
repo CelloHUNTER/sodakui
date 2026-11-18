@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118f";
+import { firebaseConfig } from "./firebase-config.js?v=20261118g";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -107,7 +107,7 @@ function render() {
     $("waitText").textContent = "じゅんびちゅう…";
     return;
   }
-  if (room.status === "finished") {
+  if (room.status === "finished" || room.status === "closed") {
     show("doneCard");
     if (me && me.totalEarned !== undefined) {
       $("resultText").textContent = room.questions.length + "もん中 " + (me.correctCount || 0) + "もん せいかい！";

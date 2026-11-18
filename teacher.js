@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118e";
+import { firebaseConfig } from "./firebase-config.js?v=20261118g";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -74,6 +74,7 @@ onAuthStateChanged(auth, async (user) => {
     $("mainArea").classList.remove("hidden");
     $("whoami").textContent = user.email;
     await loadNicknames();
+    await loadResumableRooms();
   } else {
     uid = null;
     $("loginCard").classList.remove("hidden");
@@ -223,6 +224,61 @@ $("qrBtn").addEventListener("click", () => {
   $("qrPopup").classList.remove("hidden");
 });
 $("qrClose").addEventListener("click", () => $("qrPopup").classList.add("hidden"));
+
+$("closeRoomBtn").addEventListener("click", async () => {
+  if (!roomCode) return;
+  if (!confirm("この部屋を閉じますか？（子どもは結果画面になります）")) return;
+  await updateDoc(doc(db, "rooms", roomCode), { status: "closed" });
+  location.reload();
+});
+
+// 終わっていない自分の部屋を探して、復帰できるようにする（更新・再ログイン対策）
+async function loadResumableRooms() {
+  const snap = await getDocs(query(collection(db, "rooms"), where("teacherId", "==", uid)));
+  const list = $("resumeList");
+  list.innerHTML = "";
+  let count = 0;
+  snap.forEach((d) => {
+    const r = d.data();
+    if (r.status !== "waiting" && r.status !== "playing") return;
+    count++;
+    const row = document.createElement("div");
+    row.className = "nickitem";
+    const label = document.createElement("span");
+    label.style.flex = "1";
+    label.style.fontSize = "18px";
+    label.textContent = d.id + "　「" + r.quizTitle + "」" + (r.status === "waiting" ? "（ロビー）" : "（進行中）");
+    const back = document.createElement("button");
+    back.textContent = "戻る";
+    back.addEventListener("click", () => resumeRoom(d.id));
+    const close = document.createElement("button");
+    close.className = "gray";
+    close.textContent = "閉じる";
+    close.addEventListener("click", async () => {
+      await updateDoc(doc(db, "rooms", d.id), { status: "closed" });
+      await loadResumableRooms();
+    });
+    row.appendChild(label);
+    row.appendChild(back);
+    row.appendChild(close);
+    list.appendChild(row);
+  });
+  $("resumeArea").classList.toggle("hidden", count === 0);
+}
+
+function resumeRoom(code) {
+  roomCode = code;
+  const url = new URL("./play.html", location.href);
+  url.searchParams.set("room", roomCode);
+  roomUrlStr = url.toString();
+  $("setupCard").classList.add("hidden");
+  $("roomCard").classList.remove("hidden");
+  $("roomCode").textContent = roomCode;
+  $("roomUrl").textContent = roomUrlStr;
+  $("qrcode").innerHTML = "";
+  new QRCode($("qrcode"), { text: roomUrlStr, width: 200, height: 200 });
+  watchRoom();
+}
 
 function watchRoom() {
   onSnapshot(doc(db, "rooms", roomCode), (snap) => {
