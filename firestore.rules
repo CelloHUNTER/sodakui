@@ -1,0 +1,77 @@
+rules_version = '2';
+
+// そだクイ 本番用セキュリティルール（下書き）
+// 方針: 既定は全拒否。先生は自分のデータだけ。子ども（匿名認証）は参加中の部屋だけ。
+// 注意: 子どもは匿名認証のため「ニックネーム本人」であることはルールでは保証できない。
+//       そのため点数の書き込みは先生だけに限定し、子どもは参加と回答だけができる形にする。
+// デプロイ方法は PRODUCTION.md を参照。これは下書きであり、教室での本番使用前に
+// エミュレータテスト（tests/）を通すこと。
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isTeacher(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function roomTeacher(roomCode) {
+      return get(/databases/$(database)/documents/rooms/$(roomCode)).data.teacherId;
+    }
+
+    // 先生の許可リスト兼プロフィール。作成は管理者（コンソール）だけ。
+    match /teachers/{uid} {
+      allow get: if isTeacher(uid);
+      allow list: if false;
+      allow create: if false; // 招待制: コンソールで手作成する
+      allow update: if isTeacher(uid);
+      allow delete: if false;
+
+      // 生徒（ニックネーム）・自作クイズ・記録は、その先生だけ
+      match /students/{docId} {
+        allow read, write: if isTeacher(uid);
+      }
+      match /quizzes/{docId} {
+        allow read, write: if isTeacher(uid);
+      }
+      match /records/{docId} {
+        allow read, write: if isTeacher(uid);
+      }
+    }
+
+    // 部屋。子どもは部屋コードを知っていれば中身（答えなしの問題）を読める。
+    match /rooms/{roomCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.teacherId == request.auth.uid
+        && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+      allow update: if signedIn() && resource.data.teacherId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.teacherId == request.auth.uid;
+
+      // 参加者。参加（作成）はログイン済みなら可。点数の更新は先生だけ。
+      // 削除は退出する子ども本人と先生（匿名のため本人確認はできない前提の割り切り）。
+      match /players/{nickname} {
+        allow get, list: if signedIn();
+        allow create: if signedIn();
+        allow update: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
+        allow delete: if signedIn();
+      }
+
+      // 回答。作成は参加者。読み取りはログイン済み（子どもは再入室時に自分の回答を読み直すため）。
+      // 更新・削除は先生だけ。
+      match /answers/{answerId} {
+        allow get, list: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
+      }
+    }
+
+    // それ以外はすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
