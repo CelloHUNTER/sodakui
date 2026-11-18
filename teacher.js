@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118k";
-import * as S from "./sound.js?v=20261118k";
+import { firebaseConfig } from "./firebase-config.js?v=20261118l";
+import * as S from "./sound.js?v=20261118l";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -681,18 +681,20 @@ $("cardsBtn").addEventListener("click", async () => {
 
 $("podiumBtn").addEventListener("click", async () => {
   if (!room || room.status !== "finished") return;
-  if (S.currentBGM() !== "results") S.startBGM("results");
+  if (!S.currentBGM()) S.startBGM("results");
   const ranks = podiumRanks();
   const step = room.podium || 0;
   const btn = $("podiumBtn");
   if (step < ranks.length) {
-    // ドラムロール → ジャジャーンと同時に名前が出る
+    // BGMを止めてドラムロール → ジャジャーンと同時に名前が出て、発表用BGMが流れ出す
     btn.disabled = true;
     btn.textContent = "……";
+    S.stopBGM();
     S.playDrumroll(1200);
     await new Promise((r) => setTimeout(r, 1200));
     await updateDoc(doc(db, "rooms", roomCode), { podium: step + 1 });
     S.playJajan();
+    setTimeout(() => S.startBGM("fanfare"), 150);
     if (ranks[step] === 1) launchConfetti();
     btn.disabled = false;
   } else if (step === ranks.length) {
