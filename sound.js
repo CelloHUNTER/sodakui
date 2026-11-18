@@ -166,40 +166,58 @@ const LEAD = [
   [[0, E5], [6, D5], [8, B4], [12, A4]]
 ];
 const LEAD_END = [[0, E5], [4, G5], [8, A5], [12, A5]];
+// 結果発表用: C-G-Am-F の明るい進行（オリジナル）
+const F5 = 698.46, C6 = 1046.5;
+const CHORDS_R = [
+  [65.41, [261.63, 329.63, 392.0]],
+  [49.0, [246.94, 293.66, 392.0]],
+  [55.0, [220.0, 261.63, 329.63]],
+  [43.65, [174.61, 220.0, 261.63]]
+];
+const LEAD_R = [
+  [[0, C5], [4, E5], [8, G5], [12, E5]],
+  [[0, B4], [4, D5], [8, G5], [12, D5]],
+  [[0, A4], [4, C5], [8, E5], [12, A5]],
+  [[0, A4], [4, F5], [8, A5], [12, G5]]
+];
+const LEAD_R_END = [[0, C5], [4, E5], [8, G5], [12, C6]];
 
 let seq = null;
+export function currentBGM() { return seq ? seq.mode : null; }
 
 function scheduleStep(stepIdx, t) {
   const mode = seq.mode;
+  const isR = mode === "results";
   const barTotal = Math.floor(stepIdx / 16);
   const st = stepIdx % 16;
-  const [root, chord] = CHORDS[barTotal % 4];
+  const [root, chord] = (isR ? CHORDS_R : CHORDS)[barTotal % 4];
   const intensity = mode === "question" ? 0.55 + 0.45 * ((barTotal % 8) / 7) : 1;
   if (st % 4 === 0) kick(t);
-  if (st === 4 || st === 12) snare(t, 0.4 * (mode === "lobby" ? 1 : intensity));
-  if (mode === "lobby") {
+  if (st === 4 || st === 12) snare(t, 0.4 * (mode === "question" ? intensity : 1));
+  if (mode === "question") {
+    hat(t, 0.07 + 0.08 * intensity, st % 4 === 2);
+  } else {
     if (st % 4 === 2) hat(t, 0.16, true);
     else if (st % 2 === 0) hat(t, 0.1, false);
-  } else {
-    hat(t, 0.07 + 0.08 * intensity, st % 4 === 2);
   }
   if (st % 2 === 0) bass(t, root * (st % 8 === 6 ? 2 : 1), STEP * 2 * 0.95);
-  if (st % 4 === 2) stab(t, chord, 0.13 * (mode === "lobby" ? 1 : 0.7 + 0.3 * intensity));
+  if (st % 4 === 2) stab(t, chord, 0.13 * (mode === "question" ? 0.7 + 0.3 * intensity : 1));
   if (mode === "question") {
     const scale = chord.concat([chord[0] * 2]);
     arp(t, scale[st % 4] * 2, 0.035 + 0.04 * intensity);
   }
-  if (mode === "lobby") {
-    const pat = (barTotal % 8 === 7) ? LEAD_END : LEAD[barTotal % 4];
+  if (isR && st % 2 === 0) arp(t, chord[(st / 2) % 3] * 4, 0.016);
+  if (mode === "lobby" || isR) {
+    const pat = (barTotal % 8 === 7) ? (isR ? LEAD_R_END : LEAD_END) : (isR ? LEAD_R : LEAD)[barTotal % 4];
     pat.forEach(([s, f]) => { if (s === st) pluck(t, f); });
   }
 }
 
 export function startBGM(mode) {
   if (!settings.bgm) return;
+  ac();
   if (seq && seq.mode === mode) return;
   stopBGM();
-  ac();
   seq = { mode, step: 0, nextTime: ctx.currentTime + 0.06, timer: null };
   seq.timer = setInterval(() => {
     while (seq && seq.nextTime < ctx.currentTime + 0.12) {

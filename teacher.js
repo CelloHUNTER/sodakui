@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118i";
-import * as S from "./sound.js?v=20261118i";
+import { firebaseConfig } from "./firebase-config.js?v=20261118j";
+import * as S from "./sound.js?v=20261118j";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -329,9 +329,8 @@ function watchRoom() {
         S.startBGM("question");
       }
     }
-    if (prevStatus !== null && prevStatus !== room.status && room.status === "finished") {
-      S.stopBGM();
-      S.playFanfare();
+    if (room.status === "finished" && S.currentBGM() !== "results") {
+      S.startBGM("results");
     }
     prevPhase = room.phase; prevStatus = room.status;
     renderDisplay();
@@ -386,7 +385,14 @@ function renderDisplay() {
   const inGame = room.status === "playing" || room.status === "finished";
   $("lobbyArea").classList.toggle("hidden", inGame);
   $("displayArea").classList.toggle("hidden", !inGame);
-  if (!inGame) { renderChips(); return; }
+  if (!inGame) { $("podiumArea").classList.add("hidden"); renderChips(); return; }
+  if (room.status === "finished") {
+    $("displayArea").classList.add("hidden");
+    $("podiumArea").classList.remove("hidden");
+    renderPodium();
+    return;
+  }
+  $("podiumArea").classList.add("hidden");
   const idx = room.currentIndex;
   const q = room.questions[idx];
   $("dProgress").textContent = (idx + 1) + " / " + room.questions.length + " もんめ　「" + room.quizTitle + "」";
@@ -600,5 +606,78 @@ async function finishRoom() {
     }
     await updateDoc(ref, { scored: true });
   }
-  await updateDoc(ref, { status: "finished", phase: "reveal" });
+  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0 });
+}
+
+// ===== 結果発表（表彰台） =====
+function podiumRanks() {
+  return [3, 2, 1].filter((r) => r <= playersCache.length);
+}
+function renderPodium() {
+  const sorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+  const ranks = podiumRanks();
+  const step = room.podium || 0;
+  [[1, sorted[0]], [2, sorted[1]], [3, sorted[2]]].forEach(([rank, p]) => {
+    const el = $("pname" + rank);
+    const shown = p && ranks.includes(rank) && ranks.indexOf(rank) < step;
+    if (shown) {
+      if (el.textContent !== p.nickname) {
+        el.textContent = p.nickname;
+        el.classList.remove("popin");
+        void el.offsetWidth;
+        el.classList.add("popin");
+      }
+    } else {
+      el.textContent = "";
+    }
+  });
+  const btn = $("podiumBtn");
+  if (step < ranks.length) {
+    btn.classList.remove("hidden");
+    btn.textContent = ranks[step] + "いの はっぴょう";
+    $("podiumMsg").textContent = "";
+  } else if (step === ranks.length) {
+    btn.classList.remove("hidden");
+    btn.textContent = "おつかれさま！";
+    $("podiumMsg").textContent = "";
+  } else {
+    btn.classList.add("hidden");
+    $("podiumMsg").textContent = "みんな おつかれさま！";
+  }
+}
+$("podiumBtn").addEventListener("click", async () => {
+  if (!room || room.status !== "finished") return;
+  if (S.currentBGM() !== "results") S.startBGM("results");
+  const ranks = podiumRanks();
+  const step = room.podium || 0;
+  if (step < ranks.length) {
+    await updateDoc(doc(db, "rooms", roomCode), { podium: step + 1 });
+    if (ranks[step] === 1) { S.playCorrect(); launchConfetti(); }
+    else S.playJoin();
+  } else if (step === ranks.length) {
+    await updateDoc(doc(db, "rooms", roomCode), { podium: step + 1 });
+    S.playCorrect();
+    launchConfetti();
+  }
+});
+
+function launchConfetti() {
+  const layer = $("confetti");
+  if (!layer) return;
+  layer.innerHTML = "";
+  const colors = ["#e63946", "#457b9d", "#2a9d8f", "#e9c46a", "#ff9f45"];
+  for (let i = 0; i < 40; i++) {
+    const s = document.createElement("span");
+    s.className = "confetti";
+    s.style.left = Math.random() * 100 + "%";
+    s.style.background = colors[i % colors.length];
+    const size = 8 + Math.random() * 7;
+    s.style.width = size + "px";
+    s.style.height = size + "px";
+    if (i % 3 === 0) s.style.borderRadius = "50%";
+    s.style.animationDuration = (1.6 + Math.random()) + "s";
+    s.style.animationDelay = (Math.random() * 0.3) + "s";
+    layer.appendChild(s);
+  }
+  setTimeout(() => { layer.innerHTML = ""; }, 3200);
 }
