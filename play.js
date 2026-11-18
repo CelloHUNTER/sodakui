@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118d";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js?v=20261118e";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -17,6 +17,7 @@ let nickname = null;
 let room = null;
 let me = null; // players/{nickname} の内容
 let myChoices = {}; // q -> choice（この端末で答えた内容）
+let revealAnim = { idx: -1, done: false }; // ポイント加算モーションの管理
 
 function show(id) {
   CARDS.forEach((c) => $(c).classList.toggle("hidden", c !== id));
@@ -30,19 +31,35 @@ async function enterRoom(code) {
   localStorage.setItem("sodakui_room", roomCode);
   const savedNick = localStorage.getItem("sodakui_nickname");
   if (savedNick && room.roster.includes(savedNick)) {
+    // 自分の名前が保存されていれば、そのまま復帰する（他の端末では選べない）
     await joinAs(savedNick);
-  } else {
-    const grid = $("nickGrid");
-    grid.innerHTML = "";
-    room.roster.forEach((n) => {
-      const b = document.createElement("button");
+    return;
+  }
+  renderNickGrid(new Set());
+  show("nickCard");
+  // 入室済みの名前はグレーにして選べなくする（リアルタイムで反映）
+  onSnapshot(collection(db, "rooms", roomCode, "players"), (ps) => {
+    if (nickname) return;
+    renderNickGrid(new Set(ps.docs.map((d) => d.id)));
+  });
+}
+
+function renderNickGrid(joinedSet) {
+  const grid = $("nickGrid");
+  grid.innerHTML = "";
+  room.roster.forEach((n) => {
+    const b = document.createElement("button");
+    if (joinedSet.has(n)) {
+      b.className = "nick taken";
+      b.textContent = n;
+      b.disabled = true;
+    } else {
       b.className = "nick";
       b.textContent = n;
       b.addEventListener("click", () => joinAs(n));
-      grid.appendChild(b);
-    });
-    show("nickCard");
-  }
+    }
+    grid.appendChild(b);
+  });
 }
 
 async function joinAs(nick) {
@@ -96,9 +113,33 @@ function render() {
     const correct = mine !== undefined && mine === room.answerIndex;
     $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "！";
     $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "おしい！";
+    $("revealQ").textContent = q.text;
     $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
-    $("revealPoints").textContent = me && me.lastEarned !== undefined
-      ? "この もんだいで " + me.lastEarned + " ポイント（ごうけい " + (me.totalEarned || 0) + "）" : "";
+    if (me && me.lastEarned !== undefined) {
+      const total = me.totalEarned || 0;
+      const earned = me.lastEarned || 0;
+      const prev = total - earned;
+      if (revealAnim.idx !== idx) {
+        revealAnim = { idx, done: false };
+        $("revealPoints").innerHTML =
+          (earned > 0 ? "<span class='pluspop'>+" + earned + "</span> " : "") +
+          "ごうけい <span id='totalPts'>" + prev + "</span> ポイント";
+        const start = performance.now(), dur = 900;
+        const tick = (t) => {
+          const el = $("totalPts");
+          if (!el) return;
+          const k = Math.min(1, (t - start) / dur);
+          el.textContent = Math.round(prev + earned * k);
+          if (k < 1) requestAnimationFrame(tick);
+          else revealAnim.done = true;
+        };
+        setTimeout(() => requestAnimationFrame(tick), 500);
+      } else if (revealAnim.done) {
+        $("revealPoints").textContent = "この もんだいで " + earned + " ポイント（ごうけい " + total + "）";
+      }
+    } else {
+      $("revealPoints").textContent = "";
+    }
     show("revealCard");
     return;
   }

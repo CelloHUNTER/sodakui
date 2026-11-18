@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118d";
+import { firebaseConfig } from "./firebase-config.js?v=20261118e";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -38,6 +38,7 @@ const $ = (id) => document.getElementById(id);
 
 let uid = null;
 let roomCode = null;
+let roomUrlStr = "";
 let room = null;
 let playersCache = [];
 let answersCache = [];
@@ -206,11 +207,22 @@ $("createRoomBtn").addEventListener("click", async () => {
   $("roomCode").textContent = roomCode;
   const url = new URL("./play.html", location.href);
   url.searchParams.set("room", roomCode);
-  $("roomUrl").textContent = url.toString();
+  roomUrlStr = url.toString();
+  $("roomUrl").textContent = roomUrlStr;
   $("qrcode").innerHTML = "";
-  new QRCode($("qrcode"), { text: url.toString(), width: 200, height: 200 });
+  new QRCode($("qrcode"), { text: roomUrlStr, width: 200, height: 200 });
   watchRoom();
 });
+
+$("qrBtn").addEventListener("click", () => {
+  if (!roomCode) return;
+  $("popupCode").textContent = roomCode;
+  $("popupUrl").textContent = roomUrlStr;
+  $("qrcodeBig").innerHTML = "";
+  new QRCode($("qrcodeBig"), { text: roomUrlStr, width: 220, height: 220 });
+  $("qrPopup").classList.remove("hidden");
+});
+$("qrClose").addEventListener("click", () => $("qrPopup").classList.add("hidden"));
 
 function watchRoom() {
   onSnapshot(doc(db, "rooms", roomCode), (snap) => {
@@ -279,6 +291,13 @@ function renderDisplay() {
     d.innerHTML = "<span>" + SYMBOLS[i] + " " + c + "</span><span class='dcount' id='dc" + i + "'></span>";
     box.appendChild(d);
   });
+  const dAns = $("dAnswer");
+  if (room.phase === "reveal" && room.answerIndex !== null && room.answerIndex !== undefined) {
+    dAns.textContent = "こたえ：" + SYMBOLS[room.answerIndex] + " " + q.choices[room.answerIndex];
+    dAns.classList.remove("hidden");
+  } else {
+    dAns.classList.add("hidden");
+  }
   $("revealBtn").classList.toggle("hidden", room.phase !== "question");
   const isLast = idx >= room.questions.length - 1;
   $("nextBtn").classList.toggle("hidden", room.phase !== "reveal");
@@ -300,6 +319,11 @@ function renderDisplayCounts() {
   }
 }
 
+const animatedQ = new Set();
+let rankAnimating = false;
+
+function prevTotal(p) { return (p.totalEarned || 0) - (p.lastEarned || 0); }
+
 function renderRanking() {
   const area = $("rankingArea");
   if (!room || (room.phase !== "reveal" && room.status !== "finished")) {
@@ -307,8 +331,57 @@ function renderRanking() {
     return;
   }
   area.classList.remove("hidden");
+  if (rankAnimating) return;
+  const list = $("rankingList");
+  const idx = room.currentIndex;
+  // 答え合わせ直後は、前の点数から加算されるモーション＋順位の入れ替わりを見せる
+  if (room.status !== "finished" && !animatedQ.has(idx) && playersCache.some((p) => p.lastEarned !== undefined)) {
+    animatedQ.add(idx);
+    rankAnimating = true;
+    const rows = {};
+    const prevSorted = [...playersCache].sort((a, b) => prevTotal(b) - prevTotal(a));
+    list.innerHTML = "";
+    prevSorted.forEach((p, i) => {
+      const row = document.createElement("div");
+      row.className = "rankrow";
+      row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + p.nickname +
+        (p.lastCorrect ? " <span class='okbadge'>せいかい</span>" : "") + "</span>" +
+        "<span>" + ((p.lastEarned || 0) > 0 ? "<span class='plusbadge'>+" + p.lastEarned + "</span> " : "") +
+        "<span class='pts'>" + prevTotal(p) + "</span>点</span>";
+      list.appendChild(row);
+      rows[p.nickname] = row;
+    });
+    const start = performance.now(), dur = 900;
+    const tick = (t) => {
+      const k = Math.min(1, (t - start) / dur);
+      playersCache.forEach((p) => {
+        const row = rows[p.nickname];
+        const el = row && row.querySelector(".pts");
+        if (el) el.textContent = Math.round(prevTotal(p) + ((p.totalEarned || 0) - prevTotal(p)) * k);
+      });
+      if (k < 1) requestAnimationFrame(tick);
+      else flipReorder();
+    };
+    setTimeout(() => requestAnimationFrame(tick), 700);
+    function flipReorder() {
+      const first = {};
+      Object.entries(rows).forEach(([n, row]) => { first[n] = row.getBoundingClientRect().top; });
+      const sorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+      sorted.forEach((p) => list.appendChild(rows[p.nickname]));
+      Object.entries(rows).forEach(([n, row]) => {
+        const dy = first[n] - row.getBoundingClientRect().top;
+        if (dy) { row.style.transition = "none"; row.style.transform = "translateY(" + dy + "px)"; }
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        sorted.forEach((p, i) => { rows[p.nickname].querySelector(".rk").textContent = (i + 1) + "位"; });
+        Object.values(rows).forEach((row) => { row.style.transition = "transform .6s ease"; row.style.transform = ""; });
+        setTimeout(() => { rankAnimating = false; renderRanking(); }, 700);
+      }));
+    }
+    return;
+  }
   const sorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
-  $("rankingList").innerHTML = sorted.map((p, i) =>
+  list.innerHTML = sorted.map((p, i) =>
     "<div class='rankrow'><span>" + (i + 1) + "位　" + p.nickname + "</span><span>" +
     (p.correctCount || 0) + "問正解・" + (p.totalEarned || 0) + "点</span></div>").join("");
 }

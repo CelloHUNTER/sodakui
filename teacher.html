@@ -63,6 +63,7 @@
         <p class="note" id="dProgress"></p>
         <p class="qtext" id="dText" style="font-size:36px"></p>
         <div class="choices" id="dChoices"></div>
+        <p id="dAnswer" class="big center hidden" style="color:#2a9d8f"></p>
         <p class="center big" id="dCount"></p>
         <div class="row" style="justify-content:center">
           <button id="revealBtn">答え合わせ</button>
@@ -79,9 +80,23 @@
         <div id="chips" class="chips"></div>
         <p class="note" id="chipsNote"></p>
       </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:10px">
+        <button id="qrBtn" class="gray" style="font-size:15px; padding:8px 16px">▦ QR・コードを表示</button>
+      </div>
     </div>
   </div>
 </div>
-<script type="module" src="./teacher.js?v=20261118d"></script>
+
+<div id="qrPopup" class="popup hidden">
+  <div class="card center" style="max-width:360px; width:92%">
+    <p class="big">入り直すときは このQRか コードで</p>
+    <div class="code" id="popupCode"></div>
+    <div id="qrcodeBig" style="margin:12px auto; width:220px"></div>
+    <p class="note" id="popupUrl"></p>
+    <button id="qrClose" class="gray">とじる</button>
+  </div>
+</div>
+<script type="module" src="./teacher.js?v=20261118e"></script>
 </body>
 </html>
