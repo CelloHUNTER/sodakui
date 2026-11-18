@@ -30,9 +30,13 @@
 
     <div class="card" id="setupCard">
       <h2>ニックネーム登録</h2>
-      <p class="note">子どものニックネームを1行に1つずつ書いて保存してください。本名は入れないでください。</p>
-      <textarea id="nicknames" rows="6" placeholder="れん&#10;そら&#10;ひな"></textarea>
-      <button id="saveNickBtn">保存する</button>
+      <p class="note">本名は入れないでください。ニックネームをタップして選ぶと、削除できます。</p>
+      <div id="nickList" class="chips"></div>
+      <div class="row" style="margin-top:12px">
+        <input id="nickInput" placeholder="ニックネームを入力" style="flex:1">
+        <button id="addNickBtn">追加</button>
+        <button id="delNickBtn" class="gray">選んだものを削除</button>
+      </div>
       <span id="nickMsg"></span>
       <h2>部屋を作る</h2>
       <div class="row">

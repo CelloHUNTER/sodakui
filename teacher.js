@@ -80,17 +80,50 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+const selectedNicks = new Set();
+
 async function loadNicknames() {
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  $("nicknames").value = snap.docs.map((d) => d.id).sort().join("\n");
+  const names = snap.docs.filter((d) => d.data().active !== false).map((d) => d.id).sort();
+  const box = $("nickList");
+  box.innerHTML = "";
+  selectedNicks.clear();
+  names.forEach((n) => {
+    const b = document.createElement("button");
+    b.className = "nickbtn";
+    b.textContent = n;
+    b.addEventListener("click", () => {
+      if (selectedNicks.has(n)) { selectedNicks.delete(n); b.classList.remove("selected"); }
+      else { selectedNicks.add(n); b.classList.add("selected"); }
+    });
+    box.appendChild(b);
+  });
+  if (names.length === 0) box.textContent = "まだ登録がありません。";
 }
 
-$("saveNickBtn").addEventListener("click", async () => {
-  const names = $("nicknames").value.split("\n").map((s) => s.trim()).filter(Boolean);
-  for (const n of names) {
-    await setDoc(doc(db, "teachers", uid, "students", n), { exp: 0, points: 0, plays: 0 }, { merge: true });
+$("addNickBtn").addEventListener("click", async () => {
+  const name = $("nickInput").value.trim();
+  if (!name) return;
+  const ref = doc(db, "teachers", uid, "students", name);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, { active: true });
+  } else {
+    await setDoc(ref, { exp: 0, points: 0, plays: 0, active: true });
   }
-  $("nickMsg").textContent = names.length + "人を保存しました";
+  $("nickInput").value = "";
+  $("nickMsg").textContent = name + " を追加しました";
+  await loadNicknames();
+});
+
+$("delNickBtn").addEventListener("click", async () => {
+  if (selectedNicks.size === 0) { $("nickMsg").textContent = "削除するニックネームを選んでください"; return; }
+  // 完全削除はせず、一覧から外すだけにする（育成記録は残る）
+  for (const n of selectedNicks) {
+    await updateDoc(doc(db, "teachers", uid, "students", n), { active: false });
+  }
+  $("nickMsg").textContent = selectedNicks.size + "人を一覧から外しました";
+  await loadNicknames();
 });
 
 function makeCode() {
@@ -103,7 +136,7 @@ function makeCode() {
 $("createRoomBtn").addEventListener("click", async () => {
   const quiz = SAMPLE_QUIZZES[Number(quizSelect.value)];
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  const roster = snap.docs.map((d) => d.id).sort();
+  const roster = snap.docs.filter((d) => d.data().active !== false).map((d) => d.id).sort();
   if (roster.length === 0) { alert("先にニックネームを登録してください"); return; }
   roomCode = makeCode();
   await setDoc(doc(db, "rooms", roomCode), {
