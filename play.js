@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118j";
-import * as S from "./sound.js?v=20261118j";
+import { firebaseConfig } from "./firebase-config.js?v=20261118k";
+import * as S from "./sound.js?v=20261118k";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -11,7 +11,7 @@ const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
 const SYMBOLS = ["●", "▲", "■", "◆"];
-const CARDS = ["codeCard", "nickCard", "waitCard", "quizCard", "revealCard", "doneCard"];
+const CARDS = ["codeCard", "nickCard", "waitCard", "quizCard", "revealCard", "doneCard", "awardWaitCard"];
 
 let roomCode = null;
 let nickname = null;
@@ -147,6 +147,11 @@ function render() {
   }
   if (room.status === "finished" || room.status === "closed") {
     document.body.className = "";
+    // がんばりカードは、先生が結果発表の後に出すまで待つ
+    if (room.status === "finished" && !room.cardsShown) {
+      show("awardWaitCard");
+      return;
+    }
     show("doneCard");
     if (me && me.totalEarned !== undefined && allPlayers.length > 0) {
       const sorted = [...allPlayers].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
