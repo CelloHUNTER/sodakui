@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118m";
-import * as S from "./sound.js?v=20261118m";
+import { firebaseConfig } from "./firebase-config.js?v=20261119a";
+import * as S from "./sound.js?v=20261119a";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -187,6 +187,13 @@ function render() {
     $("revealQ").textContent = q.text;
     $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
     $("revealCount").textContent = me && me.correctCount !== undefined ? "いま " + me.correctCount + " もん せいかい" : "";
+    if (me && allPlayers.length > 0) {
+      const sortedR = [...allPlayers].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+      const myRank = sortedR.findIndex((p) => p.nickname === nickname) + 1;
+      $("revealRank").textContent = myRank > 0 ? "いま " + myRank + " い（" + allPlayers.length + "にん中）" : "";
+    } else {
+      $("revealRank").textContent = "";
+    }
     if (me && me.lastEarned !== undefined) {
       const total = me.totalEarned || 0;
       const earned = me.lastEarned || 0;

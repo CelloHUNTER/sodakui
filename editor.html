@@ -22,6 +22,28 @@
   <div id="editView" class="hidden">
     <label>クイズのタイトル</label>
     <input id="quizTitle" placeholder="例：ことばクイズ 11月">
+    <div class="card" id="genCard">
+      <p class="big">言葉クイズ自動生成</p>
+      <label>単語リスト（1行に1単語）</label>
+      <textarea id="genWords" rows="6" placeholder="ぼうし&#10;トランプ&#10;でんしゃ"></textarea>
+      <label>型</label>
+      <select id="genType">
+        <option value="first">最初の文字を ○ にする</option>
+        <option value="last">最後の文字を ○ にする</option>
+        <option value="middle">真ん中の文字を ○ にする</option>
+        <option value="shuffle">文字を並び替える</option>
+      </select>
+      <label>タイトル（指示文）</label>
+      <input id="genInst" list="instList" value="○に はいるのは どれ？">
+      <datalist id="instList">
+        <option value="○に はいるのは どれ？"></option>
+        <option value="ただしい ことばは どれ？"></option>
+        <option value="ちがうことばに かえてみよう"></option>
+        <option value="ならびかえた ことばは どれ？"></option>
+      </datalist>
+      <div class="row"><button id="genBtn" class="sub" type="button">問題を生成して追加</button></div>
+      <p class="note" id="genMsg"></p>
+    </div>
     <div id="questionsBox"></div>
     <div class="row">
       <button id="addQBtn" class="sub">＋ 問題を追加</button>
@@ -41,6 +63,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./editor.js?v=20261118m"></script>
+<script type="module" src="./editor.js?v=20261119a"></script>
 </body>
 </html>

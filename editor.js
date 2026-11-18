@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118m";
+import { firebaseConfig } from "./firebase-config.js?v=20261119a";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -176,6 +176,61 @@ function renderQuestions() {
     box.appendChild(card);
   });
 }
+
+// ===== 言葉クイズ自動生成 =====
+const KANA_POOL = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん";
+function shuffleArr(a) {
+  const x = [...a];
+  for (let i = x.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [x[i], x[j]] = [x[j], x[i]];
+  }
+  return x;
+}
+$("genBtn").addEventListener("click", () => {
+  const words = [...new Set($("genWords").value.split(/\n/).map((s) => s.trim()).filter(Boolean))];
+  const type = $("genType").value;
+  const inst = $("genInst").value.trim();
+  const msg = $("genMsg");
+  if (words.length === 0) { msg.textContent = "単語を入れてください"; return; }
+  const made = [];
+  const skipped = [];
+  for (const w of words) {
+    const chars = [...w];
+    if (type === "shuffle") {
+      if (chars.length < 2) { skipped.push(w); continue; }
+      let sh = shuffleArr(chars).join("");
+      let tries = 0;
+      while (sh === w && tries < 10) { sh = shuffleArr(chars).join(""); tries++; }
+      if (sh === w) { skipped.push(w); continue; }
+      const others = shuffleArr(words.filter((x) => x !== w)).slice(0, 3);
+      const choices = shuffleArr([w, ...others]);
+      made.push({ title: inst, text: sh, choices, answer: choices.indexOf(w) });
+    } else {
+      const pos = type === "first" ? 0 : type === "last" ? chars.length - 1 : Math.floor(chars.length / 2);
+      if (chars.length < 2 || (type === "middle" && chars.length < 3)) { skipped.push(w); continue; }
+      const correct = chars[pos];
+      const samePos = new Set();
+      words.forEach((other) => {
+        const oc = [...other];
+        if (oc.length > pos && oc[pos] !== correct) samePos.add(oc[pos]);
+      });
+      let distract = shuffleArr([...samePos]).slice(0, 3);
+      if (distract.length < 3) {
+        const pool = shuffleArr([...KANA_POOL].filter((k) => k !== correct && !distract.includes(k)));
+        distract = distract.concat(pool.slice(0, 3 - distract.length));
+      }
+      const choices = shuffleArr([correct, ...distract]);
+      const disp = chars.map((c, i) => (i === pos ? "○" : c)).join("");
+      made.push({ title: inst, text: disp, choices, answer: choices.indexOf(correct) });
+    }
+  }
+  if (made.length === 0) { msg.textContent = "作れる問題がありませんでした（単語が短すぎる等）"; return; }
+  if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
+  questions = questions.concat(made);
+  renderQuestions();
+  msg.textContent = made.length + "問を追加しました" + (skipped.length ? "（作れなかった単語：" + skipped.join("、") + "）" : "");
+});
 
 $("newQuizBtn").addEventListener("click", () => openEditor(null, null));
 $("addQBtn").addEventListener("click", () => { questions.push(blankQuestion()); renderQuestions(); });
