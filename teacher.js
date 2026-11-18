@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118g";
+import { firebaseConfig } from "./firebase-config.js?v=20261118h";
+import * as S from "./sound.js?v=20261118h";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -43,6 +44,10 @@ let room = null;
 let playersCache = [];
 let answersCache = [];
 let revealing = false;
+let prevJoined = new Set();
+let prevPhase = null;
+let prevStatus = null;
+let prevPlayerCount = 0;
 
 const quizSelect = $("quizSelect");
 SAMPLE_QUIZZES.forEach((q, i) => {
@@ -60,6 +65,31 @@ $("loginBtn").addEventListener("click", async () => {
   }
 });
 $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+// 音（BGM・効果音）のオンオフ。設定は端末に覚えさせる
+try {
+  const sv = JSON.parse(localStorage.getItem("sodakui_sound") || "{}");
+  S.setSound({ bgm: sv.bgm !== false, se: sv.se !== false });
+} catch (e) { /* 既定値のまま */ }
+function paintSoundBtns() {
+  $("bgmBtn").textContent = "BGM：" + (S.getSound().bgm ? "オン" : "オフ");
+  $("seBtn").textContent = "効果音：" + (S.getSound().se ? "オン" : "オフ");
+}
+function saveSound() {
+  localStorage.setItem("sodakui_sound", JSON.stringify(S.getSound()));
+  paintSoundBtns();
+}
+$("bgmBtn").addEventListener("click", () => {
+  const v = !S.getSound().bgm;
+  S.setSound({ bgm: v });
+  saveSound();
+  if (v && room) S.startBGM(room.status === "waiting" ? "lobby" : "question");
+});
+$("seBtn").addEventListener("click", () => {
+  S.setSound({ se: !S.getSound().se });
+  saveSound();
+});
+paintSoundBtns();
 
 onAuthStateChanged(auth, async (user) => {
   // 匿名ログイン（接続テストや子ども画面の名残）は先生として扱わない
@@ -212,7 +242,9 @@ $("createRoomBtn").addEventListener("click", async () => {
   $("roomUrl").textContent = roomUrlStr;
   $("qrcode").innerHTML = "";
   new QRCode($("qrcode"), { text: roomUrlStr, width: 200, height: 200 });
+  prevJoined = new Set();
   watchRoom();
+  S.startBGM("lobby");
 });
 
 $("qrBtn").addEventListener("click", () => {
@@ -267,6 +299,7 @@ async function loadResumableRooms() {
 }
 
 function resumeRoom(code) {
+  prevJoined = new Set();
   roomCode = code;
   const url = new URL("./play.html", location.href);
   url.searchParams.set("room", roomCode);
@@ -281,13 +314,32 @@ function resumeRoom(code) {
 }
 
 function watchRoom() {
+  prevPhase = null; prevStatus = null; prevPlayerCount = 0;
   onSnapshot(doc(db, "rooms", roomCode), (snap) => {
     if (!snap.exists()) return;
     room = snap.data();
+    // 場面の切り替わりに合わせて音を鳴らす
+    if (prevPhase !== null && prevPhase !== room.phase) {
+      if (room.phase === "reveal") {
+        S.stopBGM();
+        setTimeout(() => {
+          if (playersCache.some((p) => p.lastCorrect)) S.playCorrect(); else S.playOshii();
+        }, 350);
+      } else if (room.phase === "question" && room.status === "playing") {
+        S.startBGM("question");
+      }
+    }
+    if (prevStatus !== null && prevStatus !== room.status && room.status === "finished") {
+      S.stopBGM();
+      S.playFanfare();
+    }
+    prevPhase = room.phase; prevStatus = room.status;
     renderDisplay();
   });
   onSnapshot(collection(db, "rooms", roomCode, "players"), (snap) => {
     playersCache = snap.docs.map((d) => ({ nickname: d.id, ...d.data() }));
+    if (room && room.status === "waiting" && playersCache.length > prevPlayerCount && prevPlayerCount >= 0 && prevPhase !== null) S.playJoin();
+    prevPlayerCount = playersCache.length;
     renderChips(); renderRanking();
   });
   onSnapshot(collection(db, "rooms", roomCode, "answers"), (snap) => {
@@ -315,11 +367,15 @@ function renderChips() {
       if (answered.has(n)) d.classList.add("answered");
       d.textContent = n;
     } else {
-      if (joined.has(n)) d.classList.add("joined");
+      if (joined.has(n)) {
+        d.classList.add("joined");
+        if (!prevJoined.has(n)) d.classList.add("pop");
+      }
       d.textContent = n;
     }
     box.appendChild(d);
   });
+  if (room.status === "waiting") prevJoined = joined;
   $("chipsNote").textContent =
     room.phase === "question" ? "色が変わった子が、答えた子です" :
     room.status === "waiting" ? "色が変わった子が、入れた子です" : "";
@@ -344,9 +400,11 @@ function renderDisplay() {
       if (i === room.answerIndex) d.classList.add("correct");
       else d.classList.add("dim");
     }
-    d.innerHTML = "<span>" + SYMBOLS[i] + " " + c + "</span><span class='dcount' id='dc" + i + "'></span>";
+    if (room.hint && room.hint.q === idx && room.hint.hidden.includes(i)) d.classList.add("hinted");
+    d.innerHTML = "<span class='barbg' id='db" + i + "'></span><span>" + SYMBOLS[i] + " " + c + "</span><span class='dcount' id='dc" + i + "'></span>";
     box.appendChild(d);
   });
+  $("hintBtn").classList.toggle("hidden", !(room.phase === "question" && !(room.hint && room.hint.q === idx)));
   const dAns = $("dAnswer");
   if (room.phase === "reveal" && room.answerIndex !== null && room.answerIndex !== undefined) {
     dAns.textContent = "こたえ：" + SYMBOLS[room.answerIndex] + " " + q.choices[room.answerIndex];
@@ -370,7 +428,10 @@ function renderDisplayCounts() {
   if (room.phase === "reveal") {
     room.questions[room.currentIndex].choices.forEach((_, i) => {
       const el = $("dc" + i);
-      if (el) el.textContent = ans.filter((a) => a.choice === i).length + "人";
+      const cnt = ans.filter((a) => a.choice === i).length;
+      if (el) el.textContent = cnt + "人";
+      const bar = $("db" + i);
+      if (bar) bar.style.width = (ans.length ? Math.round(cnt / ans.length * 100) : 0) + "%";
     });
   }
 }
@@ -396,18 +457,22 @@ function renderRanking() {
     rankAnimating = true;
     const rows = {};
     const prevSorted = [...playersCache].sort((a, b) => prevTotal(b) - prevTotal(a));
+    const newSorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+    const prevRank = {}, newRank = {};
+    prevSorted.forEach((p, i) => { prevRank[p.nickname] = i + 1; });
+    newSorted.forEach((p, i) => { newRank[p.nickname] = i + 1; });
     list.innerHTML = "";
     prevSorted.forEach((p, i) => {
       const row = document.createElement("div");
       row.className = "rankrow";
       row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + p.nickname +
-        (p.lastCorrect ? " <span class='okbadge'>せいかい</span>" : "") + "</span>" +
+        (p.lastCorrect ? " <span class='okbadge'>せいかい</span>" : "") + " <span class='delta'></span></span>" +
         "<span>" + ((p.lastEarned || 0) > 0 ? "<span class='plusbadge'>+" + p.lastEarned + "</span> " : "") +
         "<span class='pts'>" + prevTotal(p) + "</span>点</span>";
       list.appendChild(row);
       rows[p.nickname] = row;
     });
-    const start = performance.now(), dur = 900;
+    const start = performance.now(), dur = 1100;
     const tick = (t) => {
       const k = Math.min(1, (t - start) / dur);
       playersCache.forEach((p) => {
@@ -418,7 +483,7 @@ function renderRanking() {
       if (k < 1) requestAnimationFrame(tick);
       else flipReorder();
     };
-    setTimeout(() => requestAnimationFrame(tick), 700);
+    setTimeout(() => requestAnimationFrame(tick), 900);
     function flipReorder() {
       const first = {};
       Object.entries(rows).forEach(([n, row]) => { first[n] = row.getBoundingClientRect().top; });
@@ -429,9 +494,16 @@ function renderRanking() {
         if (dy) { row.style.transition = "none"; row.style.transform = "translateY(" + dy + "px)"; }
       });
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        sorted.forEach((p, i) => { rows[p.nickname].querySelector(".rk").textContent = (i + 1) + "位"; });
-        Object.values(rows).forEach((row) => { row.style.transition = "transform .6s ease"; row.style.transform = ""; });
-        setTimeout(() => { rankAnimating = false; renderRanking(); }, 700);
+        sorted.forEach((p, i) => {
+          const row = rows[p.nickname];
+          row.querySelector(".rk").textContent = (i + 1) + "位";
+          const diff = prevRank[p.nickname] - newRank[p.nickname];
+          const dEl = row.querySelector(".delta");
+          if (diff > 0) { dEl.textContent = "↑" + diff; dEl.classList.add("up"); row.classList.add("risen"); }
+          else if (diff < 0) { dEl.textContent = "↓" + (-diff); dEl.classList.add("down"); }
+        });
+        Object.values(rows).forEach((row) => { row.style.transition = "transform .8s ease"; row.style.transform = ""; });
+        setTimeout(() => { rankAnimating = false; renderRanking(); }, 900);
       }));
     }
     return;
@@ -486,13 +558,27 @@ async function reveal() {
 $("revealBtn").addEventListener("click", reveal);
 
 $("startBtn").addEventListener("click", async () => {
-  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", phase: "question", currentIndex: 0 });
+  await updateDoc(doc(db, "rooms", roomCode), { status: "playing", phase: "question", currentIndex: 0, hint: null });
+  S.startBGM("question");
+});
+
+$("hintBtn").addEventListener("click", async () => {
+  if (!room || room.phase !== "question") return;
+  const quiz = SAMPLE_QUIZZES.find((q) => q.id === room.quizId);
+  if (!quiz) return;
+  const idx = room.currentIndex;
+  const ans = quiz.questions[idx].answer;
+  const wrong = room.questions[idx].choices.map((_, i) => i).filter((i) => i !== ans);
+  if (wrong.length < 2) return; // 選択肢が少ない問題ではヒントを使わない
+  // 間違いの選択肢から2つを消す
+  const hidden = wrong.sort(() => Math.random() - 0.5).slice(0, 2);
+  await updateDoc(doc(db, "rooms", roomCode), { hint: { q: idx, hidden } });
 });
 
 $("nextBtn").addEventListener("click", async () => {
   const idx = room.currentIndex;
   if (idx < room.questions.length - 1) {
-    await updateDoc(doc(db, "rooms", roomCode), { phase: "question", currentIndex: idx + 1, answerIndex: null });
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "question", currentIndex: idx + 1, answerIndex: null, hint: null });
   } else {
     await finishRoom();
   }

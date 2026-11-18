@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118g";
+import { firebaseConfig } from "./firebase-config.js?v=20261118h";
+import * as S from "./sound.js?v=20261118h";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -16,8 +17,40 @@ let roomCode = null;
 let nickname = null;
 let room = null;
 let me = null; // players/{nickname} の内容
+let allPlayers = []; // 全員の players（順位計算用）
 let myChoices = {}; // q -> choice（この端末で答えた内容）
 let revealAnim = { idx: -1, done: false }; // ポイント加算モーションの管理
+
+// 子ども側は効果音だけを小さめに鳴らす
+S.setSound({ bgm: false, volume: 0.35, se: localStorage.getItem("sodakui_se_child") !== "off" });
+function paintSeBtn() { $("seBtnChild").textContent = "おと：" + (S.getSound().se ? "オン" : "オフ"); }
+$("seBtnChild").addEventListener("click", () => {
+  const v = !S.getSound().se;
+  S.setSound({ se: v });
+  localStorage.setItem("sodakui_se_child", v ? "on" : "off");
+  paintSeBtn();
+});
+paintSeBtn();
+
+function launchConfetti() {
+  const layer = $("confetti");
+  layer.innerHTML = "";
+  const colors = ["#e63946", "#457b9d", "#2a9d8f", "#e9c46a", "#ff9f45"];
+  for (let i = 0; i < 36; i++) {
+    const s = document.createElement("span");
+    s.className = "confetti";
+    s.style.left = Math.random() * 100 + "%";
+    s.style.background = colors[i % colors.length];
+    const size = 8 + Math.random() * 7;
+    s.style.width = size + "px";
+    s.style.height = size + "px";
+    if (i % 3 === 0) s.style.borderRadius = "50%";
+    s.style.animationDuration = (1.6 + Math.random()) + "s";
+    s.style.animationDelay = (Math.random() * 0.3) + "s";
+    layer.appendChild(s);
+  }
+  setTimeout(() => { layer.innerHTML = ""; }, 3200);
+}
 
 function show(id) {
   CARDS.forEach((c) => $(c).classList.toggle("hidden", c !== id));
@@ -98,22 +131,37 @@ async function joinAs(nick) {
     me = snap.data();
     render();
   });
+  onSnapshot(collection(db, "rooms", roomCode, "players"), (snap) => {
+    allPlayers = snap.docs.map((d) => ({ nickname: d.id, ...d.data() }));
+    render();
+  });
 }
 
 function render() {
   if (!room) return;
   if (room.status === "waiting") {
+    document.body.className = "";
     show("waitCard");
     $("waitText").textContent = "じゅんびちゅう…";
     return;
   }
   if (room.status === "finished" || room.status === "closed") {
+    document.body.className = "";
     show("doneCard");
-    if (me && me.totalEarned !== undefined) {
-      $("resultText").textContent = room.questions.length + "もん中 " + (me.correctCount || 0) + "もん せいかい！";
-      $("pointText").textContent = "ぜんぶで " + (me.totalEarned || 0) + " ポイント ゲット！";
+    if (me && me.totalEarned !== undefined && allPlayers.length > 0) {
+      const sorted = [...allPlayers].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
+      const rank = sorted.findIndex((p) => p.nickname === nickname) + 1;
+      $("certName").textContent = nickname + " さん";
+      $("certRank").textContent = rank + " い";
+      $("certCorrect").textContent = room.questions.length + "もん中 " + (me.correctCount || 0) + "もん せいかい！";
+      $("certExp").textContent = "けいけんち +" + (me.totalEarned || 0);
+      $("certPoints").textContent = "ポイント +" + (me.totalEarned || 0);
     } else {
-      $("resultText").textContent = "けっさんちゅう…";
+      $("certName").textContent = "けっさんちゅう…";
+      $("certRank").textContent = "";
+      $("certCorrect").textContent = "";
+      $("certExp").textContent = "";
+      $("certPoints").textContent = "";
     }
     return;
   }
@@ -122,16 +170,20 @@ function render() {
   if (room.phase === "reveal") {
     const mine = myChoices[idx];
     const correct = mine !== undefined && mine === room.answerIndex;
+    document.body.className = mine === undefined ? "bgmu" : correct ? "bgok" : "bgng";
     $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "！";
     $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "おしい！";
     $("revealQ").textContent = q.text;
     $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
+    $("revealCount").textContent = me && me.correctCount !== undefined ? "いま " + me.correctCount + " もん せいかい" : "";
     if (me && me.lastEarned !== undefined) {
       const total = me.totalEarned || 0;
       const earned = me.lastEarned || 0;
       const prev = total - earned;
       if (revealAnim.idx !== idx) {
         revealAnim = { idx, done: false };
+        if (correct) { S.playCorrect(); launchConfetti(); }
+        else if (mine !== undefined) S.playOshii();
         $("revealPoints").innerHTML =
           (earned > 0 ? "<span class='pluspop'>+" + earned + "</span> " : "") +
           "ごうけい <span id='totalPts'>" + prev + "</span> ポイント";
@@ -155,6 +207,7 @@ function render() {
     return;
   }
   // phase === "question"
+  document.body.className = "";
   if (myChoices[idx] !== undefined) {
     show("waitCard");
     $("waitText").textContent = "こたえたよ。答え合わせを まってね";
@@ -168,7 +221,12 @@ function render() {
     const b = document.createElement("button");
     b.className = "choice c" + i;
     b.textContent = SYMBOLS[i] + " " + c;
+    if (room.hint && room.hint.q === idx && room.hint.hidden.includes(i)) {
+      b.classList.add("hinted");
+      b.disabled = true;
+    }
     b.addEventListener("click", async () => {
+      S.playClick();
       myChoices[idx] = i;
       await setDoc(doc(db, "rooms", roomCode, "answers", nickname + "_" + idx),
         { nickname, q: idx, choice: i, at: Date.now() });
