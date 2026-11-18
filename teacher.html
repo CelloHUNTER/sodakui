@@ -30,13 +30,16 @@
 
     <div class="card" id="setupCard">
       <h2>ニックネーム登録</h2>
-      <p class="note">本名は入れないでください。ニックネームをタップして選ぶと、削除できます。</p>
-      <div id="nickList" class="chips"></div>
+      <p class="note">本名は入れないでください。名前をタップすると削除の選択ができます（赤枠が選択中）。「参加／不参加」はクイズに参加する子の切り替えです。</p>
+      <div id="nickList"></div>
+      <p id="selInfo" class="big" style="color:#c1121f"></p>
       <div class="row" style="margin-top:12px">
         <input id="nickInput" placeholder="ニックネームを入力" style="flex:1">
+        <label style="font-size:16px"><input type="checkbox" id="nickTestChk"> テスト用</label>
         <button id="addNickBtn">追加</button>
         <button id="delNickBtn" class="gray">選んだものを削除</button>
       </div>
+      <p class="note">テスト用は記録に残らず、完全に削除できます。通常（本番用）は削除しても一覧から外れるだけで、記録は残ります。</p>
       <span id="nickMsg"></span>
       <h2>部屋を作る</h2>
       <div class="row">
@@ -79,6 +82,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./teacher.js?v=20261118b"></script>
+<script type="module" src="./teacher.js?v=20261118d"></script>
 </body>
 </html>

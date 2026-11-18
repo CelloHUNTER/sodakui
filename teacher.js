@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261118b";
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js?v=20261118d";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -82,23 +82,53 @@ onAuthStateChanged(auth, async (user) => {
 
 const selectedNicks = new Set();
 
+function updateSelInfo() {
+  const el = $("selInfo");
+  if (selectedNicks.size === 0) { el.textContent = ""; return; }
+  el.textContent = "選択中：" + [...selectedNicks].join("、") + "（" + selectedNicks.size + "人）";
+}
+
 async function loadNicknames() {
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  const names = snap.docs.filter((d) => d.data().active !== false).map((d) => d.id).sort();
+  const items = snap.docs
+    .filter((d) => d.data().active !== false)
+    .map((d) => ({ name: d.id, participating: d.data().participating !== false, isTest: d.data().isTest === true }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const box = $("nickList");
   box.innerHTML = "";
   selectedNicks.clear();
-  names.forEach((n) => {
+  updateSelInfo();
+  items.forEach((it) => {
+    const row = document.createElement("div");
+    row.className = "nickitem";
     const b = document.createElement("button");
-    b.className = "nickbtn";
-    b.textContent = n;
+    b.className = "nickbtn" + (it.participating ? "" : " off") + (it.isTest ? " test" : "");
+    b.textContent = it.name + (it.isTest ? "（テスト）" : "");
     b.addEventListener("click", () => {
-      if (selectedNicks.has(n)) { selectedNicks.delete(n); b.classList.remove("selected"); }
-      else { selectedNicks.add(n); b.classList.add("selected"); }
+      if (selectedNicks.has(it.name)) { selectedNicks.delete(it.name); b.classList.remove("selected"); }
+      else { selectedNicks.add(it.name); b.classList.add("selected"); }
+      updateSelInfo();
     });
-    box.appendChild(b);
+    const p = document.createElement("button");
+    p.className = "partbtn" + (it.participating ? " on" : "");
+    p.textContent = it.participating ? "参加" : "不参加";
+    p.addEventListener("click", async () => {
+      await updateDoc(doc(db, "teachers", uid, "students", it.name), { participating: !it.participating });
+      await loadNicknames();
+    });
+    const t = document.createElement("button");
+    t.className = "testbtn" + (it.isTest ? " on" : "");
+    t.textContent = it.isTest ? "テスト用" : "通常";
+    t.addEventListener("click", async () => {
+      await updateDoc(doc(db, "teachers", uid, "students", it.name), { isTest: !it.isTest });
+      await loadNicknames();
+    });
+    row.appendChild(b);
+    row.appendChild(p);
+    row.appendChild(t);
+    box.appendChild(row);
   });
-  if (names.length === 0) box.textContent = "まだ登録がありません。";
+  if (items.length === 0) box.textContent = "まだ登録がありません。";
 }
 
 $("addNickBtn").addEventListener("click", async () => {
@@ -108,9 +138,9 @@ $("addNickBtn").addEventListener("click", async () => {
     const ref = doc(db, "teachers", uid, "students", name);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      await updateDoc(ref, { active: true });
+      await updateDoc(ref, { active: true, isTest: $("nickTestChk").checked });
     } else {
-      await setDoc(ref, { exp: 0, points: 0, plays: 0, active: true });
+      await setDoc(ref, { exp: 0, points: 0, plays: 0, active: true, isTest: $("nickTestChk").checked });
     }
     $("nickInput").value = "";
     $("nickMsg").textContent = name + " を追加しました";
@@ -123,11 +153,29 @@ $("addNickBtn").addEventListener("click", async () => {
 $("delNickBtn").addEventListener("click", async () => {
   if (selectedNicks.size === 0) { $("nickMsg").textContent = "削除するニックネームを選んでください"; return; }
   try {
-    // 完全削除はせず、一覧から外すだけにする（育成記録は残る）
+    const testNames = [];
+    const normalNames = [];
     for (const n of selectedNicks) {
+      const s = await getDoc(doc(db, "teachers", uid, "students", n));
+      if (s.exists() && s.data().isTest === true) testNames.push(n); else normalNames.push(n);
+    }
+    if (testNames.length > 0) {
+      if (!confirm("テスト用の " + testNames.join("、") + " を完全に削除します（記録も消えます）。よろしいですか？")) return;
+    }
+    // 通常（本番用）は完全削除せず、一覧から外すだけ（育成記録は残る）
+    for (const n of normalNames) {
       await updateDoc(doc(db, "teachers", uid, "students", n), { active: false });
     }
-    $("nickMsg").textContent = selectedNicks.size + "人を一覧から外しました";
+    // テスト用は記録ごと完全に削除する
+    for (const n of testNames) {
+      await deleteDoc(doc(db, "teachers", uid, "students", n));
+      const recSnap = await getDocs(query(collection(db, "teachers", uid, "records"), where("nickname", "==", n)));
+      for (const r of recSnap.docs) await deleteDoc(r.ref);
+    }
+    const msgs = [];
+    if (normalNames.length) msgs.push(normalNames.length + "人を一覧から外しました");
+    if (testNames.length) msgs.push("テスト用" + testNames.length + "人を完全に削除しました");
+    $("nickMsg").textContent = msgs.join("／");
     await loadNicknames();
   } catch (e) {
     $("nickMsg").textContent = "削除できませんでした: " + (e.code || e.message);
@@ -144,7 +192,7 @@ function makeCode() {
 $("createRoomBtn").addEventListener("click", async () => {
   const quiz = SAMPLE_QUIZZES[Number(quizSelect.value)];
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  const roster = snap.docs.filter((d) => d.data().active !== false).map((d) => d.id).sort();
+  const roster = snap.docs.filter((d) => d.data().active !== false && d.data().participating !== false).map((d) => d.id).sort();
   if (roster.length === 0) { alert("先にニックネームを登録してください"); return; }
   roomCode = makeCode();
   await setDoc(doc(db, "rooms", roomCode), {
@@ -326,6 +374,8 @@ async function finishRoom() {
   const fresh = (await getDoc(ref)).data();
   if (!fresh.scored) {
     for (const p of playersCache) {
+      const stu = await getDoc(doc(db, "teachers", uid, "students", p.nickname));
+      if (stu.exists() && stu.data().isTest === true) continue; // テスト用は記録に残さない
       await setDoc(doc(db, "teachers", uid, "students", p.nickname),
         { exp: increment(p.totalEarned || 0), points: increment(p.totalEarned || 0), plays: increment(1) }, { merge: true });
       await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + p.nickname), {

@@ -31,8 +31,15 @@ th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-siz
 .chip.joined { background: #8ecae6; color: #fff; }
 .chip.answered { background: #2a9d8f; color: #fff; }
 .rankrow { display: flex; justify-content: space-between; font-size: 20px; padding: 8px 4px; border-bottom: 1px solid #eee; }
-.nickbtn { font-size: 20px; padding: 12px 20px; border-radius: 999px; background: #ffb703; color: #333; }
-.nickbtn.selected { background: #e63946; color: #fff; }
+.nickitem { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+.nickbtn { font-size: 20px; padding: 12px 20px; border-radius: 999px; background: #ffb703; color: #333; border: 4px solid transparent; flex: 1; text-align: left; }
+.nickbtn.off { background: #ced4da; color: #666; }
+.nickbtn.selected { border: 4px solid #e63946; background: #ffe3e3; color: #333; }
+.partbtn { font-size: 16px; padding: 10px 16px; border-radius: 999px; background: #adb5bd; }
+.partbtn.on { background: #2a9d8f; }
+.nickbtn.test { background: #d0bfff; }
+.testbtn { font-size: 16px; padding: 10px 16px; border-radius: 999px; background: #adb5bd; }
+.testbtn.on { background: #7b2cbf; }
 .note { color: #777; font-size: 14px; }
 .err { color: #c1121f; font-weight: bold; }
 .center { text-align: center; }
