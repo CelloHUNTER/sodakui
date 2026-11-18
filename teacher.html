@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>そだクイ 先生画面</title>
+<link rel="stylesheet" href="./style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <h1>そだクイ 先生画面</h1>
+
+  <div id="loginCard" class="card">
+    <p class="big">ログイン</p>
+    <input id="email" type="email" placeholder="メールアドレス" autocomplete="username">
+    <input id="password" type="password" placeholder="パスワード" autocomplete="current-password">
+    <button id="loginBtn">ログイン</button>
+    <p id="loginErr" class="err"></p>
+    <p class="note">アカウントは Firebase コンソールの Authentication → Users で作成したものを使います。</p>
+  </div>
+
+  <div id="mainArea" class="hidden">
+    <div class="card">
+      <div class="row">
+        <span id="whoami" class="big"></span>
+        <button id="logoutBtn" class="gray">ログアウト</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ニックネーム登録</h2>
+      <p class="note">子どものニックネームを1行に1つずつ書いて保存してください。本名は入れないでください。</p>
+      <textarea id="nicknames" rows="6" placeholder="れん&#10;そら&#10;ひな"></textarea>
+      <button id="saveNickBtn">保存する</button>
+      <span id="nickMsg"></span>
+    </div>
+
+    <div class="card">
+      <h2>部屋を作る</h2>
+      <div class="row">
+        <select id="quizSelect" style="flex:1"></select>
+        <button id="createRoomBtn">部屋を作る</button>
+      </div>
+      <div id="roomInfo" class="hidden">
+        <p class="center">子どもはこのコードを入れるか、QRを読みます</p>
+        <div class="code" id="roomCode"></div>
+        <div id="qrcode" class="center" style="margin:12px auto; width:200px"></div>
+        <p class="center note" id="roomUrl"></p>
+        <div class="row" style="justify-content:center">
+          <button id="startBtn">クイズをはじめる</button>
+          <button id="nextBtn" class="sub" disabled>つぎの問題へ</button>
+          <button id="finishBtn" class="gray">おわる（結果を出す）</button>
+        </div>
+        <p id="roomStatus" class="center big"></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>参加と回答の様子</h2>
+      <div id="playersTable">部屋を作ると、ここに表示されます。</div>
+    </div>
+  </div>
+</div>
+<script type="module" src="./teacher.js"></script>
+</body>
+</html>

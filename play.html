@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>そだクイ あそぶ</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1 class="center">そだクイ</h1>
+
+  <div id="codeCard" class="card">
+    <p class="big center">へやの ばんごうを いれてね</p>
+    <input id="roomInput" class="center" style="font-size:32px; letter-spacing:6px; text-transform:uppercase" maxlength="6" placeholder="ABC123">
+    <button id="codeBtn" style="width:100%">へやに はいる</button>
+    <p id="codeErr" class="err center"></p>
+  </div>
+
+  <div id="nickCard" class="card hidden">
+    <p class="big center">じぶんの なまえを えらんでね</p>
+    <div id="nickGrid" class="nickgrid"></div>
+  </div>
+
+  <div id="waitCard" class="card hidden center">
+    <p class="big" id="waitText">じゅんびちゅう…</p>
+    <p id="waitName"></p>
+  </div>
+
+  <div id="quizCard" class="card hidden">
+    <p class="note" id="qProgress"></p>
+    <p class="qtext" id="qText"></p>
+    <div class="choices" id="qChoices"></div>
+  </div>
+
+  <div id="doneCard" class="card hidden center">
+    <p class="big">おつかれさま！</p>
+    <p id="resultText" class="big"></p>
+    <p id="pointText" class="big"></p>
+  </div>
+</div>
+<script type="module" src="./play.js"></script>
+</body>
+</html>
