@@ -58,3 +58,37 @@
 ## プロジェクト運用
 - Firebaseプロジェクトは開発用と本番用の2つ。開発中は開発用のみ使う
 - コードはブランチ→プルリクエストで変更し、main への直接 push はしない
+
+## 実装の現状（2026-11-19追記）
+当初の設計から、実装は以下の形に落ち着いている。新しい実装はこちらの現状に合わせること。
+
+### 実際のデータ構造
+- rooms はトップレベル（部屋コードで直接引くため）。rooms/{roomCode}
+  - フィールド：teacherId, quizId, quizTitle, questions（答えを含まない写し。各要素は title, text, choices）, roster, status（waiting/playing/finished/closed）, phase（lobby/title/question/reveal）, currentIndex, answerIndex, scoredQ, scored, hint（{q, hidden}）, podium（発表の進み）, cardsShown, createdAt
+- rooms/{roomCode}/players/{nickname}：joinedAt, totalEarned, correctCount, lastEarned, lastCorrect
+- rooms/{roomCode}/answers/{nickname}_{q}：nickname, q, choice, at
+- teachers/{uid}/students/{nickname}：exp, points, plays, active（false=一覧から外す）, participating（false=部屋の対象外）, isTest（テスト用：記録に残さず完全削除可）
+- teachers/{uid}/quizzes/{quizId}：title, questions（各要素は title, text, choices, answer）, archived, updatedAt
+- teachers/{uid}/records/{roomCode}_{nickname}：date, roomCode, quizId, quizTitle, nickname, correctCount, totalCount, earned
+
+### 得点（暫定値）
+- 回答すると +2点、正解すると さらに +8点。経験値と使えるポイントは同じ増分で両方に加算（分離はデータ上のみ）
+
+### ゲームの流れ（決定事項）
+- ロビー → 問題ごとに「タイトルカード（phase=title、タイトルが空なら『問題○』）」→ 先生の「問題を出す」で出題 → 全員回答で自動で答え合わせ（手動ボタンも可）→ 順位発表（ポイントのアニメーション付き）→ 次の問題へ（進みは先生のボタン）
+- 終了時は先生画面で結果発表：3位→2位→1位の順に、ドラムロール→名前表示と同時にジャジャーン→発表用BGMが流れ続ける。4位以下は順位を出さず同サイズのタイルで結果のみ（発表が終わってから表示）
+- 子どものがんばりカードは、発表後に先生が「がんばりカードを みせる」ボタンを押したときだけ表示（room.cardsShown）
+- ヒント：先生のボタンで間違いの選択肢2つを消す（room.hint）
+- 子どもの答え合わせ画面には正解数と現在の順位（○位／○人中）も表示する
+
+### 音（sound.js）
+- BGM・効果音はすべてプログラム合成（音声ファイルなし）。124BPMのグルーヴ系BGM（ロビー／問題／結果／発表用の4モード）
+- 音を変えるときは「短い試聴サンプル→本人の了承→実装」の順を守る
+
+### クイズ作成（editor.html）
+- 先生専用ページで自作クイズの作成・編集・複製・削除（一覧から消す方式）
+- 言葉クイズ自動生成：単語リスト＋型（最初／最後／真ん中を○隠し、文字並び替え）＋指示文から一括生成し、通常の編集で直せる
+
+### セキュリティルール
+- 本番用ルールの下書きは firestore.rules、テストの下書きは tests/、移行手順は PRODUCTION.md
+- 開発プロジェクトは現在テストモード。本番使用前に必ず差し替えること
