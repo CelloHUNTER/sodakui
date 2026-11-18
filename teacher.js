@@ -58,6 +58,8 @@ $("loginBtn").addEventListener("click", async () => {
 $("logoutBtn").addEventListener("click", () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
+  // 匿名ログイン（接続テストや子ども画面の名残）は先生として扱わない
+  if (user && user.isAnonymous) user = null;
   if (user) {
     uid = user.uid;
     // 先生の許可リストに自分のドキュメントを用意する（開発段階の便宜。本番ルールでは管理者のみ作成可にする）
