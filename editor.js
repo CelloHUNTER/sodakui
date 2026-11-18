@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119a";
+import { firebaseConfig } from "./firebase-config.js?v=20261119b";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

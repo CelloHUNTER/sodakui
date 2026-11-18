@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119a";
-import * as S from "./sound.js?v=20261119a";
+import { firebaseConfig } from "./firebase-config.js?v=20261119b";
+import * as S from "./sound.js?v=20261119b";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const POINTS_JOIN = 2;   // 回答するごとに付く参加ポイント
@@ -53,6 +53,14 @@ const quizSelect = $("quizSelect");
 let quizCache = {}; // 自分のクイズ（id -> クイズ本体、答え含む）
 function getQuizData(id) {
   return SAMPLE_QUIZZES.find((q) => q.id === id) || quizCache[id] || null;
+}
+async function ensureQuiz(id) {
+  let quiz = getQuizData(id);
+  if (!quiz && uid) {
+    const d = await getDoc(doc(db, "teachers", uid, "quizzes", id));
+    if (d.exists()) { quiz = { id: d.id, ...d.data() }; quizCache[d.id] = quiz; }
+  }
+  return quiz;
 }
 async function loadQuizSelect() {
   quizSelect.innerHTML = "";
@@ -631,14 +639,28 @@ async function finishRoom() {
   const ref = doc(db, "rooms", roomCode);
   const fresh = (await getDoc(ref)).data();
   if (!fresh.scored) {
+    const quiz = await ensureQuiz(room.quizId);
+    const ansSnap = await getDocs(collection(db, "rooms", roomCode, "answers"));
+    const byNickQ = {};
+    ansSnap.forEach((d) => {
+      const a = d.data();
+      if (a.review) return;
+      (byNickQ[a.nickname] = byNickQ[a.nickname] || {})[a.q] = a.choice;
+    });
     for (const p of playersCache) {
       const stu = await getDoc(doc(db, "teachers", uid, "students", p.nickname));
       if (stu.exists() && stu.data().isTest === true) continue; // テスト用は記録に残さない
       await setDoc(doc(db, "teachers", uid, "students", p.nickname),
         { exp: increment(p.totalEarned || 0), points: increment(p.totalEarned || 0), plays: increment(1) }, { merge: true });
+      const detail = room.questions.map((_, qi) => {
+        const mine = byNickQ[p.nickname] || {};
+        const choice = mine[qi] !== undefined ? mine[qi] : null;
+        return { q: qi, choice, correct: !!(quiz && choice !== null && choice === quiz.questions[qi].answer) };
+      });
       await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + p.nickname), {
         date: new Date().toISOString(), roomCode, quizId: room.quizId, quizTitle: room.quizTitle || "", nickname: p.nickname,
-        correctCount: p.correctCount || 0, totalCount: room.questions.length, earned: p.totalEarned || 0
+        correctCount: p.correctCount || 0, totalCount: room.questions.length, earned: p.totalEarned || 0,
+        mode: "live", detail
       });
     }
     await updateDoc(ref, { scored: true });
@@ -778,20 +800,31 @@ $("recordsBtn").addEventListener("click", async () => {
     const quiz = getQuizData(r.quizId);
     const title = r.quizTitle || (quiz ? quiz.title : r.quizId);
     const d = r.date ? new Date(r.date).toLocaleDateString("ja-JP") : "";
+    const rate = r.totalCount ? Math.round((r.correctCount / r.totalCount) * 100) : 0;
     const p = document.createElement("p");
-    p.textContent = d + "　" + r.nickname + "　「" + title + "」　" + r.correctCount + " / " + r.totalCount + " 問正解" +
+    p.textContent = d + "　" + (r.mode === "review" ? "【ふくしゅう】" : "") + r.nickname + "　「" + title + "」　" +
+      r.correctCount + " / " + r.totalCount + " 問正解（" + rate + "%）" +
       (r.earned != null ? "　+" + r.earned + "点" : "");
     box.appendChild(p);
   });
   $("csvBtn").classList.remove("hidden");
 });
 $("csvBtn").addEventListener("click", () => {
-  const head = "日付,ニックネーム,クイズ,正解数,問題数,獲得ポイント\n";
+  const maxQ = recordsCache.reduce((m, r) => Math.max(m, r.totalCount || 0), 0);
+  let head = "日付,区分,ニックネーム,クイズ,正解数,問題数,正答率(%),獲得ポイント";
+  for (let i = 1; i <= maxQ; i++) head += ",問題" + i;
+  head += "\n";
   const lines = recordsCache.map((r) => {
     const quiz = getQuizData(r.quizId);
     const title = (r.quizTitle || (quiz ? quiz.title : r.quizId) || "").replace(/,/g, "、");
     const d = r.date ? new Date(r.date).toLocaleDateString("ja-JP") : "";
-    return [d, r.nickname, title, r.correctCount, r.totalCount, r.earned != null ? r.earned : ""].join(",");
+    const rate = r.totalCount ? Math.round((r.correctCount / r.totalCount) * 100) : 0;
+    const cells = [d, r.mode === "review" ? "ふくしゅう" : "本番", r.nickname, title, r.correctCount, r.totalCount, rate, r.earned != null ? r.earned : ""];
+    for (let i = 0; i < maxQ; i++) {
+      const det = r.detail && r.detail[i];
+      cells.push(!det ? "" : det.choice === null || det.choice === undefined ? "－" : det.correct ? "○" : "×");
+    }
+    return cells.join(",");
   });
   const blob = new Blob(["\uFEFF" + head + lines.join("\n")], { type: "text/csv" });
   const a = document.createElement("a");
