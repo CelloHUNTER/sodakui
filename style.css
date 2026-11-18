@@ -62,6 +62,14 @@ th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-siz
 #confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 40; }
 .confetti { position: absolute; top: -20px; animation-name: confettifall; animation-timing-function: linear; animation-fill-mode: forwards; }
 @keyframes confettifall { to { transform: translateY(108vh) rotate(680deg); } }
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin: 18px 0 6px; }
+.pblock { text-align: center; width: 30%; }
+.pstand { font-size: 34px; font-weight: bold; color: #fff; border-radius: 10px 10px 0 0; padding-top: 8px; }
+.pstand.s1 { height: 120px; background: #ffb703; }
+.pstand.s2 { height: 84px; background: #adb5bd; }
+.pstand.s3 { height: 58px; background: #cd7f32; }
+.pname { font-size: 24px; font-weight: bold; min-height: 36px; }
+.pname.popin { animation: pop .5s ease; }
 .cert { border: 5px solid #ffb703; background: linear-gradient(180deg, #ffffff, #fff6db); }
 .cert-title { font-size: 26px; font-weight: bold; color: #e07b00; margin: 6px 0; }
 .cert-rank { font-size: 44px; font-weight: bold; color: #c1121f; margin: 8px 0; }
