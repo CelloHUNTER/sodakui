@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119j";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119j";
-import * as S from "./sound.js?v=20261119j";
+import { firebaseConfig } from "./firebase-config.js?v=20261119k";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119k";
+import * as S from "./sound.js?v=20261119k";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -71,6 +71,37 @@ function setQImage(el, imageId, stillValid) {
     if (url && stillValid()) { el.src = url; el.classList.remove("hidden"); }
   });
 }
+function setWrapImage(wrapEl, imgEl, imageId, stillValid) {
+  if (!imageId) { wrapEl.classList.add("hidden"); imgEl.removeAttribute("src"); return; }
+  wrapEl.classList.add("hidden");
+  loadPlayImage(imageId).then((url) => {
+    if (url && stillValid()) { imgEl.src = url; wrapEl.classList.remove("hidden"); }
+  });
+}
+function markEl(m, isHint) {
+  const d = document.createElement("div");
+  d.className = "mark " + (isHint ? "hintm " + m.kind : "maskm " + m.shape);
+  d.style.left = m.x + "%";
+  d.style.top = m.y + "%";
+  d.style.width = m.w + "%";
+  d.style.height = m.h + "%";
+  d.style.transform = "rotate(" + (m.rot || 0) + "deg)";
+  if (!isHint && m.qmark !== false) {
+    const s = document.createElement("span");
+    s.className = "mq";
+    s.style.transform = "rotate(" + (-(m.rot || 0)) + "deg)";
+    s.textContent = "？";
+    d.appendChild(s);
+  }
+  return d;
+}
+function paintMarks(layer, masks, hints) {
+  if (!layer) return;
+  layer.innerHTML = "";
+  (masks || []).forEach((m) => layer.appendChild(markEl(m, false)));
+  (hints || []).forEach((m) => layer.appendChild(markEl(m, true)));
+}
+
 
 function show(id) {
   CARDS.forEach((c) => $(c).classList.toggle("hidden", c !== id));
@@ -352,7 +383,8 @@ function render() {
   }
   $("qProgress").textContent = (idx + 1) + " / " + room.questions.length + " もんめ";
   $("qText").textContent = q.text;
-  setQImage($("qImg"), q.imageId, () => room && room.currentIndex === idx && room.phase === "question");
+  setWrapImage($("qImgWrap"), $("qImg"), q.imageId, () => room && room.currentIndex === idx && room.phase === "question");
+  paintMarks($("qMarks"), q.masks || [], room.imgHint && room.imgHint.q === idx ? (q.hints || []) : []);
   const box = $("qChoices");
   box.innerHTML = "";
   q.choices.forEach((c, i) => {
@@ -447,7 +479,8 @@ function renderReviewQuestion() {
   show("reviewQuizCard");
   $("rvProgress").textContent = "ふくしゅう　" + (rvState.pos + 1) + " / " + rvState.list.length + " もんめ";
   $("rvText").textContent = (item.title ? item.title + "　" : "") + item.text;
-  setQImage($("rvImg"), item.imageId, () => !!rvState);
+  setWrapImage($("rvImgWrap"), $("rvImg"), item.imageId, () => !!rvState);
+  paintMarks($("rvMarks"), item.masks || [], []);
   $("rvFeedback").classList.add("hidden");
   const box = $("rvChoices");
   box.innerHTML = "";
@@ -469,6 +502,7 @@ async function answerReview(ci) {
   const correct = keyArr.includes(ci);
   rvState.answers[qi] = ci;
   if (correct) rvState.correct++;
+  paintMarks($("rvMarks"), [], []);
   [...$("rvChoices").children].forEach((el, i2) => {
     el.disabled = true;
     if (keyArr.includes(i2)) el.classList.add("correct");
