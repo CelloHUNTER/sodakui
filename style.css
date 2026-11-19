@@ -185,3 +185,7 @@ body.bar-open { padding-bottom: 215px; }
 
 .draftchip { background: #f4a259; color: #fff; border-radius: 6px; padding: 1px 7px; font-weight: 700; }
 .imgwrap.ed .qimg2 { width: 100%; }
+
+#markBar { transition: transform .25s ease; }
+#markBar.away { transform: translateY(115%); }
+.imgwrap.ed .mark.sel { opacity: .5; }
