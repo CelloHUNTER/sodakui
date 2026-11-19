@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119c";
-import * as S from "./sound.js?v=20261119c";
+import { firebaseConfig } from "./firebase-config.js?v=20261119d";
+import * as S from "./sound.js?v=20261119d";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -84,7 +84,6 @@ async function loadQuizSelect() {
     opt.value = d.id; opt.textContent = data.title;
     quizSelect.appendChild(opt);
   });
-  renderReviewChecks();
 }
 
 $("loginBtn").addEventListener("click", async () => {
@@ -390,7 +389,6 @@ function watchRoom() {
       reviewCache = {};
       snap.docs.forEach((d) => { reviewCache[d.id] = d.data(); });
       snap.docs.forEach((d) => { maybeScoreReview(code, d.id, d.data()); });
-      if (room && room.mode === "review") renderReviewStatus();
     });
   }
 }
@@ -429,16 +427,6 @@ function renderChips() {
 
 function renderDisplay() {
   if (!room) return;
-  if (room.mode === "review") {
-    $("lobbyArea").classList.add("hidden");
-    $("displayArea").classList.add("hidden");
-    $("podiumArea").classList.add("hidden");
-    $("reviewArea").classList.remove("hidden");
-    renderReviewStatus();
-    renderChips();
-    return;
-  }
-  $("reviewArea").classList.add("hidden");
   const inGame = room.status === "playing" || room.status === "finished";
   $("lobbyArea").classList.toggle("hidden", inGame);
   $("displayArea").classList.toggle("hidden", !inGame);
@@ -663,6 +651,7 @@ $("nextBtn").addEventListener("click", async () => {
 async function finishRoom() {
   const ref = doc(db, "rooms", roomCode);
   const fresh = (await getDoc(ref)).data();
+  const quizK = await ensureQuiz(room.quizId);
   if (!fresh.scored) {
     const quiz = await ensureQuiz(room.quizId);
     const ansSnap = await getDocs(collection(db, "rooms", roomCode, "answers"));
@@ -690,7 +679,8 @@ async function finishRoom() {
     }
     await updateDoc(ref, { scored: true });
   }
-  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false });
+  // 終了後は復習のために答えを部屋へ公開する（ゲーム中は渡さない）
+  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false, keys: quizK ? quizK.questions.map((q) => q.answer) : [] });
 }
 
 // ===== 結果発表（表彰台） =====
@@ -859,81 +849,7 @@ $("csvBtn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
-// ===== ふくしゅう部屋 =====
-function renderReviewChecks() {
-  const box = $("reviewQuizChecks");
-  if (!box) return;
-  box.innerHTML = "";
-  const all = [...SAMPLE_QUIZZES, ...Object.values(quizCache)];
-  all.forEach((q) => {
-    const label = document.createElement("label");
-    label.style.display = "block";
-    label.style.fontSize = "18px";
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = q.id; cb.className = "reviewQuizChk";
-    label.append(cb, document.createTextNode(" " + q.title + "（" + q.questions.length + "問）"));
-    box.appendChild(label);
-  });
-}
-
-$("createReviewBtn").addEventListener("click", async () => {
-  const ids = [...document.querySelectorAll(".reviewQuizChk:checked")].map((el) => el.value);
-  if (ids.length === 0) { alert("ふくしゅうするクイズを選んでください"); return; }
-  const quizzes = [];
-  for (const id of ids) {
-    const q = await ensureQuiz(id);
-    if (q) quizzes.push({
-      quizId: q.id, title: q.title,
-      questions: q.questions.map((x) => ({ title: x.title || "", text: x.text, choices: x.choices })),
-      keys: q.questions.map((x) => x.answer)
-    });
-  }
-  if (quizzes.length === 0) { alert("クイズが読み込めませんでした"); return; }
-  const snap = await getDocs(collection(db, "teachers", uid, "students"));
-  const roster = snap.docs.filter((d) => d.data().active !== false && d.data().participating !== false).map((d) => d.id).sort();
-  if (roster.length === 0) { alert("先にニックネームを登録してください"); return; }
-  roomCode = makeCode();
-  await setDoc(doc(db, "rooms", roomCode), {
-    teacherId: uid, mode: "review", quizTitle: "ふくしゅう", quizzes,
-    roster, status: "waiting", phase: "lobby", currentIndex: 0,
-    answerIndex: null, scoredQ: [], scored: false, createdAt: Date.now()
-  });
-  $("setupCard").classList.add("hidden");
-  $("roomCard").classList.remove("hidden");
-  $("roomCode").textContent = roomCode;
-  const url = new URL("./play.html", location.href);
-  url.searchParams.set("room", roomCode);
-  roomUrlStr = url.toString();
-  $("roomUrl").textContent = roomUrlStr;
-  $("qrcode").innerHTML = "";
-  new QRCode($("qrcode"), { text: roomUrlStr, width: 200, height: 200 });
-  prevJoined = new Set();
-  watchRoom();
-  S.startBGM("lobby");
-});
-
-function renderReviewStatus() {
-  const box = $("reviewStatus");
-  if (!box || !room) return;
-  const quizzes = room.quizzes || [];
-  if (playersCache.length === 0) {
-    box.innerHTML = "<p class='note'>まだ誰も入っていません</p>";
-    return;
-  }
-  box.innerHTML = "";
-  playersCache.forEach((p) => {
-    const line = document.createElement("p");
-    const parts = quizzes.map((q) => {
-      const d = reviewCache[p.nickname + "_" + q.quizId];
-      if (!d) return q.title + "：まだ";
-      if (d.done) return q.title + "：済（" + d.correctCount + "/" + (d.answers || []).length + "）";
-      return q.title + "：挑戦中";
-    });
-    line.textContent = p.nickname + "　" + parts.join("　／　");
-    box.appendChild(line);
-  });
-}
-
+// ===== ふくしゅうの採点（がんばりカードからの解き直し） =====
 async function maybeScoreReview(code, id, data) {
   if (!data.done || data.scored || scoringReview.has(id)) return;
   scoringReview.add(id);
