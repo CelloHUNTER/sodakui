@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119m";
+import { firebaseConfig } from "./firebase-config.js?v=20261119n";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -116,6 +116,9 @@ function downscaleImage(file) {
 
 function openEditor(id, data) {
   selMark = null;
+  undoStack = [];
+  redoStack = [];
+  updateUndoBtns();
   currentId = id;
   questions = JSON.parse(JSON.stringify(data && data.questions && data.questions.length ? data.questions : [blankQuestion()]));
   // 旧形式（answer が1つ）から新形式（answers の配列）へそろえる
@@ -165,6 +168,37 @@ function paintMarks(layer, masks, hints) {
 let selMark = null; // {q, kind: "mask"|"hint", i}
 let dragMark = null;
 
+// ===== 編集の履歴（もどる/すすむ）=====
+let undoStack = [];
+let redoStack = [];
+function snapState() { return JSON.stringify({ title: $("quizTitle").value, questions }); }
+function pushSnap(str) {
+  undoStack.push(str);
+  if (undoStack.length > 50) undoStack.shift();
+  redoStack = [];
+  updateUndoBtns();
+}
+function pushHistory() { pushSnap(snapState()); }
+function restoreState(str) {
+  const o = JSON.parse(str);
+  questions = o.questions;
+  $("quizTitle").value = o.title;
+  selMark = null;
+  renderQuestions();
+  updateUndoBtns();
+}
+function updateUndoBtns() {
+  const u = $("undoBtn"), r = $("redoBtn");
+  if (u) u.disabled = undoStack.length === 0;
+  if (r) r.disabled = redoStack.length === 0;
+}
+// 文字入力は「入力し終わったとき」に1手として記録する
+function watchText(el) {
+  let pre = null, preVal = "";
+  el.addEventListener("focus", () => { pre = snapState(); preVal = el.value; });
+  el.addEventListener("change", () => { if (pre && el.value !== preVal) pushSnap(pre); pre = null; });
+}
+
 function editorMarkEl(qi, kind, m, i) {
   const d = markEl(m, kind === "hint");
   if (selMark && selMark.q === qi && selMark.kind === kind && selMark.i === i) d.classList.add("sel");
@@ -175,7 +209,7 @@ function editorMarkEl(qi, kind, m, i) {
     d.classList.add("sel");
     document.querySelectorAll(".markctl").forEach((c) => buildMarkCtl(Number(c.dataset.q), c));
     const wrap = d.parentElement.parentElement;
-    dragMark = { qi, kind, i, rect: wrap.getBoundingClientRect(), startX: ev.clientX, startY: ev.clientY, origX: m.x, origY: m.y, el: d };
+    dragMark = { qi, kind, i, rect: wrap.getBoundingClientRect(), startX: ev.clientX, startY: ev.clientY, origX: m.x, origY: m.y, el: d, snap: snapState() };
   });
   return d;
 }
@@ -191,7 +225,15 @@ window.addEventListener("pointermove", (ev) => {
   dragMark.el.style.left = m.x + "%";
   dragMark.el.style.top = m.y + "%";
 });
-window.addEventListener("pointerup", () => { dragMark = null; });
+window.addEventListener("pointerup", () => {
+  if (dragMark) {
+    const q = questions[dragMark.qi];
+    const arr = q && (dragMark.kind === "mask" ? q.masks : q.hints);
+    const m = arr && arr[dragMark.i];
+    if (m && (m.x !== dragMark.origX || m.y !== dragMark.origY)) pushSnap(dragMark.snap);
+  }
+  dragMark = null;
+});
 
 function repaintEditorMarks(qi) {
   const layer = document.querySelector('.marks[data-q="' + qi + '"]');
@@ -227,6 +269,9 @@ function sliderRow(label, val, min, max, fn) {
   const num = document.createElement("span");
   num.className = "note"; num.textContent = val;
   inp.addEventListener("input", () => { num.textContent = inp.value; fn(Number(inp.value)); });
+  let preSnap = null, preVal = val;
+  inp.addEventListener("pointerdown", () => { preSnap = snapState(); preVal = Number(inp.value); });
+  inp.addEventListener("change", () => { if (preSnap && Number(inp.value) !== preVal) pushSnap(preSnap); preSnap = null; });
   div.append(lab, inp, num);
   return div;
 }
@@ -235,6 +280,19 @@ function mkMiniBtn(label, cls, fn) {
   b.type = "button";
   b.className = "mini " + (cls || "");
   b.textContent = label;
+  b.addEventListener("click", fn);
+  return b;
+}
+function iconBtn(ic, cap, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "mini sub iconbtn";
+  const s = document.createElement("span");
+  s.className = "ic " + ic;
+  const c = document.createElement("span");
+  c.className = "cap";
+  c.textContent = cap;
+  b.append(s, c);
   b.addEventListener("click", fn);
   return b;
 }
@@ -261,22 +319,34 @@ function buildMarkCtl(qi, box) {
       document.querySelectorAll(".markctl").forEach((c) => buildMarkCtl(Number(c.dataset.q), c));
     }));
   }
-  row.appendChild(mkMiniBtn("この図形を消す", "sub danger", () => {
+  row.appendChild(mkMiniBtn("この図形を消す", "delbtn", () => {
+    pushHistory();
     arr.splice(selMark.i, 1);
     selMark = null;
     renderQuestions();
   }));
   box.appendChild(row);
 }
+function wrapAspect(qi) {
+  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
+  if (!layer || !layer.parentElement) return 1;
+  const r = layer.parentElement.getBoundingClientRect();
+  return r.height > 0 ? r.width / r.height : 1;
+}
 function addMark(qi, kind, shape) {
+  pushHistory();
   const q = questions[qi];
+  const asp = wrapAspect(qi);
   if (kind === "mask") {
     q.masks = q.masks || [];
-    q.masks.push({ shape, x: 35, y: 30, w: 30, h: 30, rot: 0, qmark: true });
+    let w = 30, h = 30;
+    if (shape === "circle") { w = 26; h = Math.max(5, Math.min(100, Math.round(w * asp))); }
+    if (shape === "tri") { w = 30; h = Math.max(5, Math.min(100, Math.round(w * asp * 0.866))); }
+    q.masks.push({ shape, x: 35, y: Math.max(0, Math.min(30, 100 - h)), w, h, rot: 0, qmark: true });
     selMark = { q: qi, kind, i: q.masks.length - 1 };
   } else {
     q.hints = q.hints || [];
-    const defs = { arrow: [26, 18], fcircle: [32, 32], frect: [32, 26], ruler: [48, 11] };
+    const defs = { arrow: [26, 18], fcircle: [32, Math.max(5, Math.min(100, Math.round(32 * asp)))], frect: [32, 26], ruler: [48, 11] };
     const wh = defs[shape] || [30, 30];
     q.hints.push({ kind: shape, x: 30, y: 40, w: wh[0], h: wh[1], rot: 0 });
     selMark = { q: qi, kind, i: q.hints.length - 1 };
@@ -304,10 +374,10 @@ function renderQuestions() {
       return b;
     };
     head.append(
-      mkBtn("↑", "gray", () => { if (qi > 0) { [questions[qi - 1], questions[qi]] = [questions[qi], questions[qi - 1]]; renderQuestions(); } }),
-      mkBtn("↓", "gray", () => { if (qi < questions.length - 1) { [questions[qi + 1], questions[qi]] = [questions[qi], questions[qi + 1]]; renderQuestions(); } }),
-      mkBtn("複製", "sub", () => { questions.splice(qi + 1, 0, JSON.parse(JSON.stringify(q))); renderQuestions(); }),
-      mkBtn("削除", "gray", () => { if (questions.length > 1) { questions.splice(qi, 1); if (selMark) { if (selMark.q === qi) selMark = null; else if (selMark.q > qi) selMark.q--; } renderQuestions(); } })
+      mkBtn("↑", "gray", () => { if (qi > 0) { pushHistory(); [questions[qi - 1], questions[qi]] = [questions[qi], questions[qi - 1]]; renderQuestions(); } }),
+      mkBtn("↓", "gray", () => { if (qi < questions.length - 1) { pushHistory(); [questions[qi + 1], questions[qi]] = [questions[qi], questions[qi + 1]]; renderQuestions(); } }),
+      mkBtn("複製", "sub", () => { pushHistory(); questions.splice(qi + 1, 0, JSON.parse(JSON.stringify(q))); renderQuestions(); }),
+      mkBtn("削除", "gray", () => { if (questions.length > 1) { pushHistory(); questions.splice(qi, 1); if (selMark) { if (selMark.q === qi) selMark = null; else if (selMark.q > qi) selMark.q--; } renderQuestions(); } })
     );
     card.appendChild(head);
 
@@ -316,6 +386,7 @@ function renderQuestions() {
     const tInput = document.createElement("input");
     tInput.value = q.title || "";
     tInput.addEventListener("input", () => { q.title = tInput.value; });
+    watchText(tInput);
     card.append(tLabel, tInput);
 
     const qLabel = document.createElement("label");
@@ -324,6 +395,7 @@ function renderQuestions() {
     qInput.rows = 2;
     qInput.value = q.text || "";
     qInput.addEventListener("input", () => { q.text = qInput.value; });
+    watchText(qInput);
     card.append(qLabel, qInput);
 
     const chBox = document.createElement("div");
@@ -338,12 +410,14 @@ function renderQuestions() {
       input.value = c;
       input.placeholder = "選択肢" + (ci + 1);
       input.addEventListener("input", () => { q.choices[ci] = input.value; });
+      watchText(input);
       const ans = document.createElement("button");
       ans.type = "button";
       const isAns = (q.answers || []).includes(ci);
       ans.className = "mini ansbtn" + (isAns ? " on" : "");
       ans.textContent = isAns ? "正解" : "正解にする";
       ans.addEventListener("click", () => {
+        pushHistory();
         const set = new Set(q.answers || []);
         if (set.has(ci)) { if (set.size > 1) set.delete(ci); } else { set.add(ci); }
         q.answers = [...set].sort((a, b) => a - b);
@@ -354,6 +428,7 @@ function renderQuestions() {
         const delc = document.createElement("button");
         delc.type = "button"; delc.className = "mini gray"; delc.textContent = "×";
         delc.addEventListener("click", () => {
+          pushHistory();
           q.choices.splice(ci, 1);
           q.answers = (q.answers || []).filter((a) => a !== ci).map((a) => (a > ci ? a - 1 : a));
           if (q.answers.length === 0) q.answers = [0];
@@ -379,20 +454,32 @@ function renderQuestions() {
       (q.hints || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "hint", m, mi)));
       wrap.append(im, layer);
       imgBox.appendChild(wrap);
-      const addRow = document.createElement("div");
-      addRow.className = "row";
-      addRow.append(
-        mkBtn("＋四角マスク", "sub", () => addMark(qi, "mask", "rect")),
-        mkBtn("＋丸マスク", "sub", () => addMark(qi, "mask", "circle")),
-        mkBtn("＋三角マスク", "sub", () => addMark(qi, "mask", "tri"))
+      const g1 = document.createElement("p");
+      g1.className = "grouplabel";
+      g1.textContent = "かくす（マスク）";
+      const note1 = document.createElement("p");
+      note1.className = "note";
+      note1.textContent = "問題の間だけ隠れて、答え合わせで外れます";
+      const row1 = document.createElement("div");
+      row1.className = "markrow";
+      row1.append(
+        iconBtn("rect", "四角", () => addMark(qi, "mask", "rect")),
+        iconBtn("circle", "丸", () => addMark(qi, "mask", "circle")),
+        iconBtn("tri", "三角", () => addMark(qi, "mask", "tri"))
       );
-      const addRow2 = document.createElement("div");
-      addRow2.className = "row";
-      addRow2.append(
-        mkBtn("＋矢印ヒント", "sub", () => addMark(qi, "hint", "arrow")),
-        mkBtn("＋丸枠ヒント", "sub", () => addMark(qi, "hint", "fcircle")),
-        mkBtn("＋四角枠ヒント", "sub", () => addMark(qi, "hint", "frect")),
-        mkBtn("＋定規ヒント", "sub", () => addMark(qi, "hint", "ruler"))
+      const g2 = document.createElement("p");
+      g2.className = "grouplabel";
+      g2.textContent = "ヒント図形";
+      const note2 = document.createElement("p");
+      note2.className = "note";
+      note2.textContent = "ゲーム中、先生が「ヒント」ボタンを押したときだけ出ます";
+      const row2 = document.createElement("div");
+      row2.className = "markrow";
+      row2.append(
+        iconBtn("arrow", "矢印", () => addMark(qi, "hint", "arrow")),
+        iconBtn("fcircle", "丸枠", () => addMark(qi, "hint", "fcircle")),
+        iconBtn("frect", "四角枠", () => addMark(qi, "hint", "frect")),
+        iconBtn("ruler", "定規", () => addMark(qi, "hint", "ruler"))
       );
       const ctl = document.createElement("div");
       ctl.className = "markctl";
@@ -400,8 +487,8 @@ function renderQuestions() {
       buildMarkCtl(qi, ctl);
       const rm = document.createElement("button");
       rm.type = "button"; rm.className = "mini gray"; rm.textContent = "画像を外す";
-      rm.addEventListener("click", () => { q.imageId = null; if (selMark && selMark.q === qi) selMark = null; renderQuestions(); });
-      imgBox.append(addRow, addRow2, ctl, rm);
+      rm.addEventListener("click", () => { pushHistory(); q.imageId = null; q.masks = []; q.hints = []; if (selMark && selMark.q === qi) selMark = null; renderQuestions(); });
+      imgBox.append(g1, note1, row1, g2, note2, row2, ctl, rm);
     } else {
       const add = document.createElement("button");
       add.type = "button"; add.className = "mini sub"; add.textContent = "＋ 画像をつける（絵本のページなど）";
@@ -414,6 +501,7 @@ function renderQuestions() {
         try {
           const dataUrl = await downscaleImage(file.files[0]);
           const ref = await addDoc(collection(db, "teachers", teacherUid, "images"), { data: dataUrl, createdAt: Date.now() });
+          pushHistory();
           q.imageId = ref.id;
           renderQuestions();
         } catch (e) {
@@ -428,7 +516,7 @@ function renderQuestions() {
     if (q.choices.length < 4) {
       const addc = document.createElement("button");
       addc.type = "button"; addc.className = "mini sub"; addc.textContent = "＋ 選択肢を追加";
-      addc.addEventListener("click", () => { q.choices.push(""); renderQuestions(); });
+      addc.addEventListener("click", () => { pushHistory(); q.choices.push(""); renderQuestions(); });
       card.appendChild(addc);
     }
     box.appendChild(card);
@@ -473,6 +561,7 @@ $("genBtn").addEventListener("click", () => {
     }
     if (madeOdd.length === 0) { msg.textContent = "作れる問題がありませんでした"; return; }
     if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
+    pushHistory();
     questions = questions.concat(madeOdd);
     renderQuestions();
     msg.textContent = madeOdd.length + "問を追加しました";
@@ -512,13 +601,25 @@ $("genBtn").addEventListener("click", () => {
   }
   if (made.length === 0) { msg.textContent = "作れる問題がありませんでした（単語が短すぎる等）"; return; }
   if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
+  pushHistory();
   questions = questions.concat(made);
   renderQuestions();
   msg.textContent = made.length + "問を追加しました" + (skipped.length ? "（作れなかった単語：" + skipped.join("、") + "）" : "");
 });
 
 $("newQuizBtn").addEventListener("click", () => openEditor(null, null));
-$("addQBtn").addEventListener("click", () => { questions.push(blankQuestion()); renderQuestions(); });
+$("addQBtn").addEventListener("click", () => { pushHistory(); questions.push(blankQuestion()); renderQuestions(); });
+watchText($("quizTitle"));
+$("undoBtn").addEventListener("click", () => {
+  if (!undoStack.length) return;
+  redoStack.push(snapState());
+  restoreState(undoStack.pop());
+});
+$("redoBtn").addEventListener("click", () => {
+  if (!redoStack.length) return;
+  undoStack.push(snapState());
+  restoreState(redoStack.pop());
+});
 $("backBtn").addEventListener("click", showList);
 
 $("previewBtn").addEventListener("click", () => {

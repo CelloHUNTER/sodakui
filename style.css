@@ -162,3 +162,19 @@ body.ingame .footer-bar { margin-top: 8px; }
 .imgwrap.ed .mark.sel { outline: 3px solid #4361ee; outline-offset: 2px; z-index: 6; }
 .slider-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
 .slider-row input[type="range"] { flex: 1; }
+
+/* 編集画面：図形ボタンまわり */
+.grouplabel { font-weight: 700; margin: 12px 0 2px; }
+.markrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+button.iconbtn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 12px; }
+button.iconbtn .cap { font-size: 12px; }
+button.iconbtn .ic { display: block; width: 30px; height: 30px; }
+button.iconbtn .ic.rect { background: #f59e0b; border-radius: 6px; }
+button.iconbtn .ic.circle { background: #f59e0b; border-radius: 50%; }
+button.iconbtn .ic.tri { background: #f59e0b; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+button.iconbtn .ic.arrow { background: #e63946; clip-path: polygon(0 32%, 52% 32%, 52% 6%, 100% 50%, 52% 94%, 52% 68%, 0 68%); }
+button.iconbtn .ic.fcircle { border: 4px solid #e63946; border-radius: 50%; box-sizing: border-box; }
+button.iconbtn .ic.frect { border: 4px solid #e63946; border-radius: 8px; box-sizing: border-box; }
+button.iconbtn .ic.ruler { width: 38px; height: 16px; background-color: #ffe08a; border: 2px solid #b08900; border-radius: 3px; background-image: repeating-linear-gradient(to right, rgba(60,40,0,.6) 0 2px, transparent 2px 7px); background-size: 100% 45%; background-repeat: no-repeat; background-position: top left; }
+button.delbtn { background: #e63946; color: #fff; font-weight: 700; }
+button:disabled { opacity: .45; }
