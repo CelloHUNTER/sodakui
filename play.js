@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119i";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119i";
-import * as S from "./sound.js?v=20261119i";
+import { firebaseConfig } from "./firebase-config.js?v=20261119j";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119j";
+import * as S from "./sound.js?v=20261119j";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -297,13 +297,14 @@ function render() {
   }
   if (room.phase === "reveal") {
     const mine = myChoices[idx];
-    const correct = mine !== undefined && mine === room.answerIndex;
+    const ansIdxs = room.answerIndexes && room.answerIndexes.length ? room.answerIndexes : (room.answerIndex != null ? [room.answerIndex] : []);
+    const correct = mine !== undefined && ansIdxs.includes(mine);
     document.body.className = mine === undefined ? "bgmu" : correct ? "bgok" : "bgng";
     $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "！";
     $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "おしい！";
     $("revealQ").textContent = q.text;
     setQImage($("revealImg"), q.imageId, () => room && room.currentIndex === idx && room.phase === "reveal");
-    $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
+    $("revealAnswer").textContent = "せいかいは" + ansIdxs.map((ai) => "「" + q.choices[ai] + "」").join("");
     $("revealCount").textContent = me && me.correctCount !== undefined ? "いま " + me.correctCount + " もん せいかい" : "";
     if (me && allPlayers.length > 0) {
       const sortedR = [...allPlayers].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
@@ -404,7 +405,9 @@ function missedIndices() {
   if (!room || !room.keys || !room.questions) return [];
   const out = [];
   for (let i = 0; i < room.questions.length; i++) {
-    if (myChoices[i] !== room.keys[i]) out.push(i);
+    const k = room.keys[i];
+    const kArr = Array.isArray(k) ? k : [k];
+    if (!kArr.includes(myChoices[i])) out.push(i);
   }
   return out;
 }
@@ -461,20 +464,21 @@ async function answerReview(ci) {
   if (!rvState || rvState.locked || !room) return;
   rvState.locked = true;
   const qi = rvState.list[rvState.pos];
-  const key = room.keys[qi];
-  const correct = ci === key;
+  const keyRaw = room.keys[qi];
+  const keyArr = Array.isArray(keyRaw) ? keyRaw : [keyRaw];
+  const correct = keyArr.includes(ci);
   rvState.answers[qi] = ci;
   if (correct) rvState.correct++;
   [...$("rvChoices").children].forEach((el, i2) => {
     el.disabled = true;
-    if (i2 === key) el.classList.add("correct");
+    if (keyArr.includes(i2)) el.classList.add("correct");
     else if (i2 === ci) el.classList.add("dim");
   });
   document.body.className = correct ? "bgok" : "bgng";
   $("rvFeedback").classList.remove("hidden");
   $("rvMark").textContent = correct ? "◎" : "！";
   $("rvMark").style.color = correct ? "#1d7a6f" : "#d96f1e";
-  $("rvMsg").textContent = correct ? "せいかい！" : "おしい！　せいかいは「" + room.questions[qi].choices[key] + "」";
+  $("rvMsg").textContent = correct ? "せいかい！" : "おしい！　せいかいは" + keyArr.map((ai) => "「" + room.questions[qi].choices[ai] + "」").join("");
   $("rvMsg").style.color = correct ? "#1d7a6f" : "#d96f1e";
   $("rvNextBtn").textContent = rvState.pos >= rvState.list.length - 1 ? "けっかを みる" : "つぎへ";
   if (correct) S.playCorrect(); else S.playOshii();
