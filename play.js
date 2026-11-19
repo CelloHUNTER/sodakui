@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119h";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119h";
-import * as S from "./sound.js?v=20261119h";
+import { firebaseConfig } from "./firebase-config.js?v=20261119i";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119i";
+import * as S from "./sound.js?v=20261119i";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -51,6 +51,25 @@ function launchConfetti() {
     layer.appendChild(s);
   }
   setTimeout(() => { layer.innerHTML = ""; }, 3200);
+}
+
+const imgCacheP = {};
+async function loadPlayImage(imageId) {
+  if (!imageId || !room) return null;
+  if (imgCacheP[imageId]) return imgCacheP[imageId];
+  try {
+    const s = await getDoc(doc(db, "teachers", room.teacherId, "images", imageId));
+    if (!s.exists()) return null;
+    imgCacheP[imageId] = s.data().data;
+    return imgCacheP[imageId];
+  } catch (e) { return null; }
+}
+function setQImage(el, imageId, stillValid) {
+  if (!imageId) { el.classList.add("hidden"); el.removeAttribute("src"); return; }
+  el.classList.add("hidden");
+  loadPlayImage(imageId).then((url) => {
+    if (url && stillValid()) { el.src = url; el.classList.remove("hidden"); }
+  });
 }
 
 function show(id) {
@@ -283,6 +302,7 @@ function render() {
     $("revealMark").textContent = mine === undefined ? "―" : correct ? "◎" : "！";
     $("revealText").textContent = mine === undefined ? "こたえなかった もんだい" : correct ? "せいかい！" : "おしい！";
     $("revealQ").textContent = q.text;
+    setQImage($("revealImg"), q.imageId, () => room && room.currentIndex === idx && room.phase === "reveal");
     $("revealAnswer").textContent = "せいかいは「" + q.choices[room.answerIndex] + "」";
     $("revealCount").textContent = me && me.correctCount !== undefined ? "いま " + me.correctCount + " もん せいかい" : "";
     if (me && allPlayers.length > 0) {
@@ -331,6 +351,7 @@ function render() {
   }
   $("qProgress").textContent = (idx + 1) + " / " + room.questions.length + " もんめ";
   $("qText").textContent = q.text;
+  setQImage($("qImg"), q.imageId, () => room && room.currentIndex === idx && room.phase === "question");
   const box = $("qChoices");
   box.innerHTML = "";
   q.choices.forEach((c, i) => {
@@ -423,6 +444,7 @@ function renderReviewQuestion() {
   show("reviewQuizCard");
   $("rvProgress").textContent = "ふくしゅう　" + (rvState.pos + 1) + " / " + rvState.list.length + " もんめ";
   $("rvText").textContent = (item.title ? item.title + "　" : "") + item.text;
+  setQImage($("rvImg"), item.imageId, () => !!rvState);
   $("rvFeedback").classList.add("hidden");
   const box = $("rvChoices");
   box.innerHTML = "";

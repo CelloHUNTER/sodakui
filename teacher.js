@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119h";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119h";
-import * as S from "./sound.js?v=20261119h";
+import { firebaseConfig } from "./firebase-config.js?v=20261119i";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119i";
+import * as S from "./sound.js?v=20261119i";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -286,7 +286,7 @@ $("createRoomBtn").addEventListener("click", async () => {
   roomCode = makeCode();
   await setDoc(doc(db, "rooms", roomCode), {
     teacherId: uid, quizId: quiz.id, quizTitle: quiz.title,
-    questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices })),
+    questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices, imageId: q.imageId || null })),
     roster, status: "waiting", phase: "lobby", currentIndex: 0,
     answerIndex: null, scoredQ: [], scored: false, createdAt: Date.now()
   });
@@ -456,6 +456,18 @@ function renderChips() {
     room.status === "waiting" ? "色が変わった子が、入れた子です" : "";
 }
 
+const imgCacheT = {};
+async function loadRoomImage(imageId) {
+  if (!imageId) return null;
+  if (imgCacheT[imageId]) return imgCacheT[imageId];
+  try {
+    const s = await getDoc(doc(db, "teachers", uid, "images", imageId));
+    if (!s.exists()) return null;
+    imgCacheT[imageId] = s.data().data;
+    return imgCacheT[imageId];
+  } catch (e) { return null; }
+}
+
 function renderDisplay() {
   if (!room) return;
   const inGame = room.status === "playing" || room.status === "finished";
@@ -481,6 +493,16 @@ function renderDisplay() {
     return;
   }
   $("dText").textContent = q.text;
+  const dImg = $("dImg");
+  if (q.imageId) {
+    loadRoomImage(q.imageId).then((url) => {
+      if (url && room && room.currentIndex === idx) { dImg.src = url; dImg.classList.remove("hidden"); }
+    });
+    dImg.classList.add("hidden");
+  } else {
+    dImg.classList.add("hidden");
+    dImg.removeAttribute("src");
+  }
   const box = $("dChoices");
   box.innerHTML = "";
   q.choices.forEach((c, i) => {

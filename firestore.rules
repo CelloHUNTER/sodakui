@@ -40,6 +40,11 @@ service cloud.firestore {
       match /quizzes/{docId} {
         allow read, write: if isTeacher(uid);
       }
+      // 問題画像（絵本のページ等）。先生が保存し、子どもは参加中のクイズの画像を読む
+      match /images/{docId} {
+        allow read, write: if isTeacher(uid);
+        allow get: if signedIn();
+      }
       match /records/{docId} {
         allow read, write: if isTeacher(uid);
       }
