@@ -10,7 +10,11 @@
 <div class="wrap">
   <h1 class="center">そだクイ</h1>
 
-  <div id="codeCard" class="card">
+  <div id="bootCard" class="card center">
+    <p class="big">よみこみちゅう…</p>
+  </div>
+
+  <div id="codeCard" class="card hidden">
     <p class="big center">へやの ばんごうを いれてね</p>
     <input id="roomInput" class="center" style="font-size:32px; letter-spacing:6px; text-transform:uppercase" maxlength="6" placeholder="ABC123">
     <button id="codeBtn" style="width:100%">へやに はいる</button>
@@ -48,12 +52,6 @@
     <p>おおきい がめんを みてね</p>
   </div>
 
-  <div id="reviewListCard" class="card hidden">
-    <p class="big center">ふくしゅう</p>
-    <p class="center">クイズを えらんでね</p>
-    <div id="reviewQuizList"></div>
-  </div>
-
   <div id="reviewQuizCard" class="card hidden">
     <p class="note" id="rvProgress"></p>
     <p class="qtext" id="rvText"></p>
@@ -69,7 +67,7 @@
     <p class="big">おつかれさま！</p>
     <p id="rvResult" class="big"></p>
     <p id="rvPoints"></p>
-    <button id="rvBackBtn">クイズいちらんに もどる</button>
+    <button id="rvBackBtn">がんばりカードに もどる</button>
   </div>
 
   <div id="doneCard" class="card hidden center cert">
@@ -79,12 +77,14 @@
     <p id="certCorrect" class="big"></p>
     <p id="certExp" class="big"></p>
     <p id="certPoints" class="big"></p>
+    <button id="cardReviewBtn" class="hidden" style="margin-top:12px">まちがえた もんだいを ふくしゅうする</button>
+    <p id="cardReviewNote" class="big"></p>
   </div>
 
   <button id="exitBtn" class="gray hidden" style="margin-top:16px; width:100%">へやを でる（さいしょに もどる）</button>
   <button id="seBtnChild" class="gray" style="margin-top:8px; width:100%">おと：オン</button>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./play.js?v=20261119c"></script>
+<script type="module" src="./play.js?v=20261119e"></script>
 </body>
 </html>
