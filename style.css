@@ -178,3 +178,7 @@ button.iconbtn .ic.frect { border: 4px solid #e63946; border-radius: 8px; box-si
 button.iconbtn .ic.ruler { width: 38px; height: 16px; background-color: #ffe08a; border: 2px solid #b08900; border-radius: 3px; background-image: repeating-linear-gradient(to right, rgba(60,40,0,.6) 0 2px, transparent 2px 7px); background-size: 100% 45%; background-repeat: no-repeat; background-position: top left; }
 button.delbtn { background: #e63946; color: #fff; font-weight: 700; }
 button:disabled { opacity: .45; }
+
+/* 編集画面：図形の調整バー（画面下に固定） */
+.markbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: #fff; border-top: 2px solid #e0dcd2; box-shadow: 0 -3px 12px rgba(0,0,0,.15); padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); }
+body.bar-open { padding-bottom: 215px; }

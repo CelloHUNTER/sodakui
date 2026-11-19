@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>そだクイ クイズ編集</title>
-<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./style.css?v=20261119o">
 </head>
 <body>
 <div class="wrap">
@@ -55,6 +55,7 @@
     <div id="previewBox" class="card hidden">
       <p class="note">子ども側の見え方</p>
       <div class="row" id="previewNav"></div>
+      <div class="row"><button id="pvHintBtn" class="gray" type="button">ヒント表示：オフ</button></div>
       <p id="pvTitle" class="center big"></p>
       <p id="pvText" class="qtext"></p>
       <div class="imgwrap hidden" id="pvImgWrap"><img id="pvImg" class="qimg2" alt=""><div class="marks" id="pvMarks"></div></div>
@@ -69,6 +70,7 @@
     </div>
   </div>
 </div>
-<script type="module" src="./editor.js?v=20261119n"></script>
+<div id="markBar" class="markbar hidden"></div>
+<script type="module" src="./editor.js?v=20261119o"></script>
 </body>
 </html>
