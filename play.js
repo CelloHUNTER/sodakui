@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119f";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119f";
-import * as S from "./sound.js?v=20261119f";
+import { firebaseConfig } from "./firebase-config.js?v=20261119h";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119h";
+import * as S from "./sound.js?v=20261119h";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -451,7 +451,9 @@ async function answerReview(ci) {
   document.body.className = correct ? "bgok" : "bgng";
   $("rvFeedback").classList.remove("hidden");
   $("rvMark").textContent = correct ? "◎" : "！";
+  $("rvMark").style.color = correct ? "#1d7a6f" : "#d96f1e";
   $("rvMsg").textContent = correct ? "せいかい！" : "おしい！　せいかいは「" + room.questions[qi].choices[key] + "」";
+  $("rvMsg").style.color = correct ? "#1d7a6f" : "#d96f1e";
   $("rvNextBtn").textContent = rvState.pos >= rvState.list.length - 1 ? "けっかを みる" : "つぎへ";
   if (correct) S.playCorrect(); else S.playOshii();
   try {

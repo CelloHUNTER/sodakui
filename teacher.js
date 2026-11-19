@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119f";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119f";
-import * as S from "./sound.js?v=20261119f";
+import { firebaseConfig } from "./firebase-config.js?v=20261119h";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119h";
+import * as S from "./sound.js?v=20261119h";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -292,6 +292,7 @@ $("createRoomBtn").addEventListener("click", async () => {
   });
   $("setupCard").classList.add("hidden");
   $("roomCard").classList.remove("hidden");
+  document.body.classList.add("ingame");
   $("roomCode").textContent = roomCode;
   const url = new URL("./play.html", location.href);
   url.searchParams.set("room", roomCode);
@@ -363,6 +364,7 @@ function resumeRoom(code) {
   roomUrlStr = url.toString();
   $("setupCard").classList.add("hidden");
   $("roomCard").classList.remove("hidden");
+  document.body.classList.add("ingame");
   $("roomCode").textContent = roomCode;
   $("roomUrl").textContent = roomUrlStr;
   $("qrcode").innerHTML = "";
