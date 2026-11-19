@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119c";
-import * as S from "./sound.js?v=20261119c";
+import { firebaseConfig } from "./firebase-config.js?v=20261119e";
+import * as S from "./sound.js?v=20261119e";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -11,7 +11,7 @@ const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
 const SYMBOLS = ["●", "▲", "■", "◆"];
-const CARDS = ["codeCard", "nickCard", "waitCard", "quizCard", "revealCard", "doneCard", "awardWaitCard", "reviewListCard", "reviewQuizCard", "reviewDoneCard"];
+const CARDS = ["bootCard", "codeCard", "nickCard", "waitCard", "quizCard", "revealCard", "doneCard", "awardWaitCard", "reviewQuizCard", "reviewDoneCard"];
 
 let roomCode = null;
 let nickname = null;
@@ -54,7 +54,7 @@ function launchConfetti() {
 
 function show(id) {
   CARDS.forEach((c) => $(c).classList.toggle("hidden", c !== id));
-  $("exitBtn").classList.toggle("hidden", id === "codeCard");
+  $("exitBtn").classList.toggle("hidden", id === "codeCard" || id === "bootCard");
 }
 
 $("exitBtn").addEventListener("click", async () => {
@@ -67,25 +67,41 @@ $("exitBtn").addEventListener("click", async () => {
   location.reload();
 });
 
+let entering = false;
 async function enterRoom(code) {
-  roomCode = code.toUpperCase();
-  const snap = await getDoc(doc(db, "rooms", roomCode));
-  if (!snap.exists()) { $("codeErr").textContent = "その へやは ありません"; return; }
-  room = snap.data();
-  localStorage.setItem("sodakui_room", roomCode);
-  const savedNick = localStorage.getItem("sodakui_nickname");
-  if (savedNick && room.roster.includes(savedNick)) {
-    // 自分の名前が保存されていれば、そのまま復帰する（他の端末では選べない）
-    await joinAs(savedNick);
-    return;
+  if (entering) return;
+  entering = true;
+  try {
+    roomCode = code.toUpperCase();
+    const snap = await getDoc(doc(db, "rooms", roomCode));
+    if (!snap.exists()) {
+      if (localStorage.getItem("sodakui_room") === roomCode) localStorage.removeItem("sodakui_room");
+      roomCode = null;
+      show("codeCard");
+      $("codeErr").textContent = "その へやは ありません";
+      return;
+    }
+    room = snap.data();
+    localStorage.setItem("sodakui_room", roomCode);
+    const savedNick = localStorage.getItem("sodakui_nickname");
+    if (savedNick && room.roster.includes(savedNick)) {
+      // 自分の名前が保存されていれば、そのまま復帰する（他の端末では選べない）
+      await joinAs(savedNick);
+      return;
+    }
+    renderNickGrid(new Set());
+    show("nickCard");
+    // 入室済みの名前はグレーにして選べなくする（リアルタイムで反映）
+    onSnapshot(collection(db, "rooms", roomCode, "players"), (ps) => {
+      if (nickname) return;
+      renderNickGrid(new Set(ps.docs.map((d) => d.id)));
+    });
+  } catch (e) {
+    show("codeCard");
+    $("codeErr").textContent = "つうしんが うまくいきませんでした。もう一度ためしてね";
+  } finally {
+    entering = false;
   }
-  renderNickGrid(new Set());
-  show("nickCard");
-  // 入室済みの名前はグレーにして選べなくする（リアルタイムで反映）
-  onSnapshot(collection(db, "rooms", roomCode, "players"), (ps) => {
-    if (nickname) return;
-    renderNickGrid(new Set(ps.docs.map((d) => d.id)));
-  });
 }
 
 function renderNickGrid(joinedSet) {
@@ -141,22 +157,11 @@ async function joinAs(nick) {
       const data = d.data();
       if (data.nickname === nickname) myReview[data.quizId] = data;
     });
-    if (room && room.mode === "review" && !rvState) renderReview();
   });
 }
 
 function render() {
   if (!room) return;
-  if (room.mode === "review" && nickname) {
-    document.body.className = "";
-    if (room.status === "closed") {
-      show("waitCard");
-      $("waitText").textContent = "ふくしゅうは おわりました";
-      return;
-    }
-    renderReview();
-    return;
-  }
   if (room.status === "waiting") {
     document.body.className = "";
     show("waitCard");
@@ -186,6 +191,7 @@ function render() {
       $("certExp").textContent = "";
       $("certPoints").textContent = "";
     }
+    paintCardReview();
     return;
   }
   const idx = room.currentIndex;
@@ -279,53 +285,69 @@ $("codeBtn").addEventListener("click", () => {
 });
 
 (async () => {
-  await signInAnonymously(auth);
-  const params = new URLSearchParams(location.search);
-  const fromUrl = params.get("room");
-  const saved = localStorage.getItem("sodakui_room");
-  if (fromUrl) enterRoom(fromUrl);
-  else if (saved) enterRoom(saved).catch(() => show("codeCard"));
+  // 起動中は「よみこみちゅう」だけを見せ、自動入室が終わるまでコード入力欄を出さない
+  // （入力途中で画面が切り替わるのを防ぐ）
+  try {
+    await signInAnonymously(auth);
+    const params = new URLSearchParams(location.search);
+    const fromUrl = params.get("room");
+    const saved = localStorage.getItem("sodakui_room");
+    if (fromUrl) await enterRoom(fromUrl);
+    else if (saved) await enterRoom(saved);
+    else show("codeCard");
+  } catch (e) {
+    show("codeCard");
+  }
 })();
 
-// ===== ふくしゅうモード =====
+// ===== ふくしゅう（がんばりカードから、間違えた問題の解き直し） =====
 const REVIEW_POINTS = 2; // 正解1問あたり（先生側の採点と一致させる）
-let rvState = null;      // {quizIdx, qIdx, answers, correct, locked}
-let myReview = {};       // quizId -> 自分の進み具合
+let rvState = null;      // {list, pos, answers（全問ぶん）, correct, locked}
+let myReview = {};       // quizId -> 自分の復習の進み具合（scored判定用）
 
-function renderReview() {
-  if (rvState) { renderReviewQuestion(); return; }
-  show("reviewListCard");
-  const box = $("reviewQuizList");
-  box.innerHTML = "";
-  (room.quizzes || []).forEach((q, i) => {
-    const d = myReview[q.quizId];
-    const b = document.createElement("button");
-    b.style.display = "block";
-    b.style.width = "100%";
-    b.style.margin = "8px 0";
-    b.textContent = q.title + "（" + q.questions.length + "問）" +
-      (d && d.done ? "　済：" + d.correctCount + "問正解" : d ? "　挑戦中" : "");
-    b.addEventListener("click", () => startReviewQuiz(i));
-    box.appendChild(b);
-  });
+function missedIndices() {
+  if (!room || !room.keys || !room.questions) return [];
+  const out = [];
+  for (let i = 0; i < room.questions.length; i++) {
+    if (myChoices[i] !== room.keys[i]) out.push(i);
+  }
+  return out;
 }
 
-async function startReviewQuiz(i) {
-  const q = room.quizzes[i];
-  rvState = { quizIdx: i, qIdx: 0, answers: [], correct: 0, locked: false };
-  await setDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + q.quizId), {
-    nickname, quizId: q.quizId, title: q.title, answers: [], correctCount: 0, done: false,
-    scored: (myReview[q.quizId] && myReview[q.quizId].scored) || false, startedAt: Date.now()
-  });
+function paintCardReview() {
+  const btn = $("cardReviewBtn");
+  const note = $("cardReviewNote");
+  if (!room || !room.keys) { btn.classList.add("hidden"); note.textContent = ""; return; }
+  const missed = missedIndices();
+  if (missed.length === 0) {
+    btn.classList.add("hidden");
+    note.textContent = "ぜんぶ せいかい！すごい！";
+  } else {
+    btn.classList.remove("hidden");
+    btn.textContent = "まちがえた もんだいを ふくしゅうする（" + missed.length + "問）";
+    note.textContent = "";
+  }
+}
+
+$("cardReviewBtn").addEventListener("click", async () => {
+  const list = missedIndices();
+  if (list.length === 0 || !room) return;
+  rvState = { list, pos: 0, answers: new Array(room.questions.length).fill(null), correct: 0, locked: false };
+  try {
+    await setDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId), {
+      nickname, quizId: room.quizId, title: room.quizTitle || "", answers: rvState.answers, correctCount: 0, done: false,
+      scored: (myReview[room.quizId] && myReview[room.quizId].scored) || false, startedAt: Date.now()
+    });
+  } catch (e) { /* 保存に失敗しても復習は続けられる */ }
   renderReviewQuestion();
-}
+});
 
 function renderReviewQuestion() {
-  if (!rvState) return;
-  const q = room.quizzes[rvState.quizIdx];
-  const item = q.questions[rvState.qIdx];
+  if (!rvState || !room) return;
+  const qi = rvState.list[rvState.pos];
+  const item = room.questions[qi];
   show("reviewQuizCard");
-  $("rvProgress").textContent = q.title + "　" + (rvState.qIdx + 1) + " / " + q.questions.length + " もんめ";
+  $("rvProgress").textContent = "ふくしゅう　" + (rvState.pos + 1) + " / " + rvState.list.length + " もんめ";
   $("rvText").textContent = (item.title ? item.title + "　" : "") + item.text;
   $("rvFeedback").classList.add("hidden");
   const box = $("rvChoices");
@@ -340,12 +362,12 @@ function renderReviewQuestion() {
 }
 
 async function answerReview(ci) {
-  if (!rvState || rvState.locked) return;
+  if (!rvState || rvState.locked || !room) return;
   rvState.locked = true;
-  const q = room.quizzes[rvState.quizIdx];
-  const key = q.keys[rvState.qIdx];
+  const qi = rvState.list[rvState.pos];
+  const key = room.keys[qi];
   const correct = ci === key;
-  rvState.answers.push(ci);
+  rvState.answers[qi] = ci;
   if (correct) rvState.correct++;
   [...$("rvChoices").children].forEach((el, i2) => {
     el.disabled = true;
@@ -355,37 +377,36 @@ async function answerReview(ci) {
   document.body.className = correct ? "bgok" : "bgng";
   $("rvFeedback").classList.remove("hidden");
   $("rvMark").textContent = correct ? "◎" : "！";
-  $("rvMsg").textContent = correct ? "せいかい！" : "おしい！　せいかいは「" + q.questions[rvState.qIdx].choices[key] + "」";
-  $("rvNextBtn").textContent = rvState.qIdx >= q.questions.length - 1 ? "けっかを みる" : "つぎへ";
+  $("rvMsg").textContent = correct ? "せいかい！" : "おしい！　せいかいは「" + room.questions[qi].choices[key] + "」";
+  $("rvNextBtn").textContent = rvState.pos >= rvState.list.length - 1 ? "けっかを みる" : "つぎへ";
   if (correct) S.playCorrect(); else S.playOshii();
   try {
-    await updateDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + q.quizId),
+    await updateDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId),
       { answers: rvState.answers, correctCount: rvState.correct });
-  } catch (e) { /* 進み具合の保存に失敗しても回答は続けられる */ }
+  } catch (e) { /* 同上 */ }
 }
 
 $("rvNextBtn").addEventListener("click", async () => {
-  if (!rvState) return;
-  const q = room.quizzes[rvState.quizIdx];
+  if (!rvState || !room) return;
   document.body.className = "";
-  if (rvState.qIdx < q.questions.length - 1) {
-    rvState.qIdx++;
+  if (rvState.pos < rvState.list.length - 1) {
+    rvState.pos++;
     rvState.locked = false;
     renderReviewQuestion();
     return;
   }
-  const wasScored = !!(myReview[q.quizId] && myReview[q.quizId].scored);
-  const total = q.questions.length;
+  const wasScored = !!(myReview[room.quizId] && myReview[room.quizId].scored);
+  const total = rvState.list.length;
   const correctCount = rvState.correct;
   try {
-    await updateDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + q.quizId),
+    await updateDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId),
       { done: true, correctCount, answers: rvState.answers });
   } catch (e) { /* 同上 */ }
-  $("rvResult").textContent = total + "問中 " + correctCount + "問 せいかい！";
+  $("rvResult").textContent = total + "問中 " + correctCount + "問 なおせた！";
   $("rvPoints").textContent = wasScored ? "ポイントは 1回目だけ もらえます" : "+" + (correctCount * REVIEW_POINTS) + " ポイント（1問 " + REVIEW_POINTS + "点）";
   rvState = null;
   show("reviewDoneCard");
   S.playFanfare();
 });
 
-$("rvBackBtn").addEventListener("click", () => { renderReview(); });
+$("rvBackBtn").addEventListener("click", () => { render(); });
