@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119k";
+import { firebaseConfig } from "./firebase-config.js?v=20261119m";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -78,6 +78,7 @@ async function showList() {
     card.appendChild(row);
     box.appendChild(card);
   });
+  window.scrollTo(0, keepY);
 }
 
 function blankQuestion() {
@@ -229,6 +230,14 @@ function sliderRow(label, val, min, max, fn) {
   div.append(lab, inp, num);
   return div;
 }
+function mkMiniBtn(label, cls, fn) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "mini " + (cls || "");
+  b.textContent = label;
+  b.addEventListener("click", fn);
+  return b;
+}
 function buildMarkCtl(qi, box) {
   box.innerHTML = "";
   if (!selMark || selMark.q !== qi) return;
@@ -246,13 +255,13 @@ function buildMarkCtl(qi, box) {
   const row = document.createElement("div");
   row.className = "row";
   if (selMark.kind === "mask") {
-    row.appendChild(mkBtn(m.qmark === false ? "？を出す" : "？を消す", "sub", () => {
+    row.appendChild(mkMiniBtn(m.qmark === false ? "？を出す" : "？を消す", "sub", () => {
       m.qmark = m.qmark === false ? true : false;
       repaintEditorMarks(qi);
       document.querySelectorAll(".markctl").forEach((c) => buildMarkCtl(Number(c.dataset.q), c));
     }));
   }
-  row.appendChild(mkBtn("この図形を消す", "sub danger", () => {
+  row.appendChild(mkMiniBtn("この図形を消す", "sub danger", () => {
     arr.splice(selMark.i, 1);
     selMark = null;
     renderQuestions();
@@ -273,9 +282,12 @@ function addMark(qi, kind, shape) {
     selMark = { q: qi, kind, i: q.hints.length - 1 };
   }
   renderQuestions();
+  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
+  if (layer) layer.parentElement.scrollIntoView({ block: "center" });
 }
 
 function renderQuestions() {
+  const keepY = window.scrollY;
   const box = $("questionsBox");
   box.innerHTML = "";
   questions.forEach((q, qi) => {
