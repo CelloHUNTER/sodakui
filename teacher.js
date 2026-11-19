@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119e";
-import * as S from "./sound.js?v=20261119e";
+import { firebaseConfig } from "./firebase-config.js?v=20261119f";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119f";
+import * as S from "./sound.js?v=20261119f";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -155,7 +156,7 @@ async function loadNicknames() {
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
   const items = snap.docs
     .filter((d) => d.data().active !== false)
-    .map((d) => ({ name: d.id, participating: d.data().participating !== false, isTest: d.data().isTest === true }))
+    .map((d) => ({ name: d.id, participating: d.data().participating !== false, isTest: d.data().isTest === true, partner: d.data().partner || null }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const box = $("nickList");
   box.innerHTML = "";
@@ -167,6 +168,13 @@ async function loadNicknames() {
     const b = document.createElement("button");
     b.className = "nickbtn" + (it.participating ? "" : " off") + (it.isTest ? " test" : "");
     b.textContent = it.name + (it.isTest ? "（テスト）" : "");
+    if (it.partner && CHARA_IMGS[it.partner]) {
+      const im = document.createElement("img");
+      im.className = "chip-chara";
+      im.src = CHARA_IMGS[it.partner];
+      im.alt = "";
+      b.prepend(im);
+    }
     b.addEventListener("click", () => {
       if (selectedNicks.has(it.name)) { selectedNicks.delete(it.name); b.classList.remove("selected"); }
       else { selectedNicks.add(it.name); b.classList.add("selected"); }
@@ -242,6 +250,19 @@ $("delNickBtn").addEventListener("click", async () => {
     await loadNicknames();
   } catch (e) {
     $("nickMsg").textContent = "削除できませんでした: " + (e.code || e.message);
+  }
+});
+
+$("resetCharaBtn").addEventListener("click", async () => {
+  if (selectedNicks.size === 0) { $("nickMsg").textContent = "キャラをリセットする子を選んでください"; return; }
+  try {
+    for (const n of selectedNicks) {
+      await updateDoc(doc(db, "teachers", uid, "students", n), { partner: null });
+    }
+    $("nickMsg").textContent = selectedNicks.size + "人のキャラをリセットしました（次回また選べます）";
+    await loadNicknames();
+  } catch (e) {
+    $("nickMsg").textContent = "リセットできませんでした: " + (e.code || e.message);
   }
 });
 
@@ -404,18 +425,26 @@ function renderChips() {
   box.innerHTML = "";
   const answered = new Set(currentAnswers().map((a) => a.nickname));
   const joined = new Set(playersCache.map((p) => p.nickname));
+  const partnerOf = {};
+  playersCache.forEach((p) => { partnerOf[p.nickname] = p.partner; });
   room.roster.forEach((n) => {
     const d = document.createElement("div");
     d.className = "chip";
     if (room.phase === "question" || room.phase === "reveal") {
       if (answered.has(n)) d.classList.add("answered");
-      d.textContent = n;
     } else {
       if (joined.has(n)) {
         d.classList.add("joined");
         if (!prevJoined.has(n)) d.classList.add("pop");
       }
-      d.textContent = n;
+    }
+    d.textContent = n;
+    if (partnerOf[n] && CHARA_IMGS[partnerOf[n]]) {
+      const im = document.createElement("img");
+      im.className = "chip-chara";
+      im.src = CHARA_IMGS[partnerOf[n]];
+      im.alt = "";
+      d.prepend(im);
     }
     box.appendChild(d);
   });
@@ -524,7 +553,7 @@ function renderRanking() {
     prevSorted.forEach((p, i) => {
       const row = document.createElement("div");
       row.className = "rankrow";
-      row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + p.nickname +
+      row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + (p.partner && CHARA_IMGS[p.partner] ? "<img class='chara-icon' src='" + CHARA_IMGS[p.partner] + "'> " : "") + p.nickname +
         (p.lastCorrect ? " <span class='okbadge'>せいかい</span>" : "") + " <span class='delta'></span></span>" +
         "<span>" + ((p.lastEarned || 0) > 0 ? "<span class='plusbadge'>+" + p.lastEarned + "</span> " : "") +
         "<span class='pts'>" + prevTotal(p) + "</span>点</span>";
