@@ -51,14 +51,20 @@
     <div class="choices" id="qChoices"></div>
   </div>
 
-  <div id="revealCard" class="card hidden center">
-    <p id="revealMark" style="font-size:64px; margin:8px"></p>
-    <p id="revealText" class="big"></p>
-    <p id="revealQ" class="qtext" style="font-size:22px"></p>
-    <p id="revealAnswer" class="big"></p>
-    <p id="revealPoints" class="big"></p>
-    <p id="revealCount"></p>
-    <p id="revealRank" class="big"></p>
+  <div id="revealCard" class="hidden">
+    <div class="judge-box">
+      <p id="revealMark" class="judge-mark"></p>
+      <p id="revealText" class="judge-msg"></p>
+    </div>
+    <div class="card mini-card center">
+      <p id="revealQ" class="qtext" style="font-size:22px"></p>
+      <p id="revealAnswer" class="big"></p>
+    </div>
+    <div class="card mini-card center">
+      <p id="revealPoints" class="big"></p>
+      <p id="revealCount"></p>
+      <p id="revealRank"></p>
+    </div>
   </div>
 
   <div id="awardWaitCard" class="card hidden center">
@@ -96,10 +102,12 @@
     <p id="cardReviewNote" class="big"></p>
   </div>
 
-  <button id="exitBtn" class="gray hidden" style="margin-top:16px; width:100%">へやを でる（さいしょに もどる）</button>
-  <button id="seBtnChild" class="gray" style="margin-top:8px; width:100%">おと：オン</button>
+  <div class="btn-row">
+    <button id="exitBtn" class="gray small-btn hidden">へやを でる</button>
+    <button id="seBtnChild" class="gray small-btn">おと：オン</button>
+  </div>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./play.js?v=20261119f"></script>
+<script type="module" src="./play.js?v=20261119h"></script>
 </body>
 </html>
