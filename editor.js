@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119p";
+import { firebaseConfig } from "./firebase-config.js?v=20261119q";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -363,6 +363,53 @@ async function saveDraft() {
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraft(); });
 window.addEventListener("pagehide", () => { saveDraft(); });
+
+// ===== 調整バーの出し入れ（スクロール中は引っ込む／外側タップで消える／矢印キー移動） =====
+let barGuardUntil = 0;
+let scrollAwayTimer = null;
+function deselectMark() {
+  selMark = null;
+  document.querySelectorAll(".imgwrap.ed .mark.sel").forEach((el) => el.classList.remove("sel"));
+  buildMarkCtl();
+}
+window.addEventListener("scroll", () => {
+  const bar = $("markBar");
+  if (!bar || !selMark || bar.classList.contains("hidden")) return;
+  if (Date.now() < barGuardUntil) return;
+  bar.classList.add("away");
+  clearTimeout(scrollAwayTimer);
+  scrollAwayTimer = setTimeout(() => { bar.classList.remove("away"); }, 280);
+}, { passive: true });
+document.addEventListener("pointerdown", (e) => {
+  if (!selMark) return;
+  if (e.target.closest("#markBar")) return;
+  if (e.target.closest(".imgwrap.ed .mark")) return;
+  deselectMark();
+});
+let arrowSnap = null, arrowMoved = false, arrowTimer = null;
+document.addEventListener("keydown", (e) => {
+  if (!selMark) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!d) return;
+  const q = questions[selMark.q];
+  const m = q && (selMark.kind === "mask" ? q.masks : q.hints)[selMark.i];
+  if (!m) return;
+  e.preventDefault();
+  if (!arrowSnap) arrowSnap = snapState();
+  m.x = Math.max(0, Math.min(98, m.x + d[0]));
+  m.y = Math.max(0, Math.min(98, m.y + d[1]));
+  arrowMoved = true;
+  syncMarkEl(selMark.q);
+  scheduleDraft();
+  clearTimeout(arrowTimer);
+  arrowTimer = setTimeout(() => {
+    if (arrowMoved && arrowSnap) pushSnap(arrowSnap);
+    arrowSnap = null;
+    arrowMoved = false;
+  }, 600);
+});
 window.addEventListener("beforeunload", (e) => {
   if (draftReady && !$("editView").classList.contains("hidden") && snapState() !== baselineStr) {
     e.preventDefault();
@@ -387,12 +434,14 @@ function buildMarkCtl() {
   const bar = $("markBar");
   if (!bar) return;
   const keepY = window.scrollY;
+  barGuardUntil = Date.now() + 350;
   bar.innerHTML = "";
   const q = selMark && questions[selMark.q];
   const arr = q && (selMark.kind === "mask" ? (q.masks || []) : (q.hints || []));
   const m = arr && arr[selMark.i];
   if (!q || !m) {
     bar.classList.add("hidden");
+    bar.classList.remove("away");
     document.body.classList.remove("bar-open");
     window.scrollTo(0, keepY);
     return;
@@ -434,11 +483,7 @@ function buildMarkCtl() {
     selMark = null;
     renderQuestions();
   }));
-  row.appendChild(mkMiniBtn("閉じる", "gray", () => {
-    selMark = null;
-    document.querySelectorAll(".imgwrap.ed .mark").forEach((el) => el.classList.remove("sel"));
-    buildMarkCtl();
-  }));
+  row.appendChild(mkMiniBtn("閉じる", "gray", () => deselectMark()));
   bar.appendChild(row);
   window.scrollTo(0, keepY);
 }
