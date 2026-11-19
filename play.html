@@ -26,7 +26,21 @@
     <div id="nickGrid" class="nickgrid"></div>
   </div>
 
+  <div id="charaCard" class="card hidden">
+    <p class="big center">パートナーを えらんでね</p>
+    <div id="charaGrid" class="chara-grid"></div>
+  </div>
+
+  <div id="charaConfirmCard" class="card hidden center">
+    <p class="big">この子に する？</p>
+    <img id="charaConfirmImg" class="chara-big" alt="">
+    <p id="charaConfirmName" class="big"></p>
+    <button id="charaYesBtn" style="width:100%">この子にする</button>
+    <button id="charaNoBtn" class="gray" style="width:100%; margin-top:8px">やめる（えらびなおす）</button>
+  </div>
+
   <div id="waitCard" class="card hidden center">
+    <img id="waitChara" class="chara-big hidden" alt="">
     <p class="big" id="waitText">じゅんびちゅう…</p>
     <p id="waitName"></p>
   </div>
@@ -72,6 +86,7 @@
 
   <div id="doneCard" class="card hidden center cert">
     <p class="cert-title">★ がんばりカード ★</p>
+    <img id="certChara" class="chara-mid hidden" alt="">
     <p id="certName" class="big"></p>
     <p id="certRank" class="cert-rank"></p>
     <p id="certCorrect" class="big"></p>
@@ -85,6 +100,6 @@
   <button id="seBtnChild" class="gray" style="margin-top:8px; width:100%">おと：オン</button>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./play.js?v=20261119e"></script>
+<script type="module" src="./play.js?v=20261119f"></script>
 </body>
 </html>

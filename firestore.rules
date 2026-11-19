@@ -31,6 +31,11 @@ service cloud.firestore {
       // 生徒（ニックネーム）・自作クイズ・記録は、その先生だけ
       match /students/{docId} {
         allow read, write: if isTeacher(uid);
+        // 子どもは自分のパートナー（キャラ）を選ぶため、読み取りと partner だけの更新を許可
+        // （ニックネーム本人かどうかはルールでは保証できない前提。DESIGN.mdの注意を参照）
+        allow get: if signedIn();
+        allow update: if signedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partner']);
       }
       match /quizzes/{docId} {
         allow read, write: if isTeacher(uid);
@@ -66,6 +71,13 @@ service cloud.firestore {
         allow get, list: if signedIn();
         allow create: if signedIn();
         allow update, delete: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
+      }
+
+      // 復習の進み具合。子どもが自分の分を作成・更新し、採点の書き込みは先生も行う。
+      match /review/{docId} {
+        allow get, list: if signedIn();
+        allow create, update: if signedIn();
+        allow delete: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
       }
     }
 

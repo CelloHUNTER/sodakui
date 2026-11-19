@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119e";
-import * as S from "./sound.js?v=20261119e";
+import { firebaseConfig } from "./firebase-config.js?v=20261119f";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119f";
+import * as S from "./sound.js?v=20261119f";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
 const app = initializeApp(firebaseConfig, "child");
@@ -11,7 +12,7 @@ const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
 const SYMBOLS = ["●", "▲", "■", "◆"];
-const CARDS = ["bootCard", "codeCard", "nickCard", "waitCard", "quizCard", "revealCard", "doneCard", "awardWaitCard", "reviewQuizCard", "reviewDoneCard"];
+const CARDS = ["bootCard", "codeCard", "nickCard", "charaCard", "charaConfirmCard", "waitCard", "quizCard", "revealCard", "doneCard", "awardWaitCard", "reviewQuizCard", "reviewDoneCard"];
 
 let roomCode = null;
 let nickname = null;
@@ -122,11 +123,75 @@ function renderNickGrid(joinedSet) {
   });
 }
 
+let myPartner = null;
+let choosing = false;
+let pendingChara = null;
+
+const CHARACTERS = [
+  { id: "cat", name: "ねこ" }, { id: "dog", name: "いぬ" }, { id: "bird", name: "とり" },
+  { id: "train", name: "でんしゃ" }, { id: "truck", name: "トラック" }, { id: "fire", name: "しょうぼうしゃ" },
+  { id: "police", name: "パトカー" }, { id: "sports", name: "スポーツカー" }, { id: "bus", name: "バス" },
+  { id: "momotaro", name: "ももたろう" }, { id: "kasajizo", name: "かさじぞう" },
+  { id: "tsuru", name: "つるのおんがえし" }, { id: "ushiwaka", name: "うしわかまる" },
+  { id: "tyrano", name: "ティラノサウルス" }, { id: "tricera", name: "トリケラトプス" }, { id: "ptera", name: "プテラノドン" },
+  { id: "robot", name: "ロボット" }, { id: "puni", name: "ぷにロボ" }, { id: "fugu", name: "ふぐ" }
+];
+
+function paintCharaImg(el) {
+  if (myPartner && CHARA_IMGS[myPartner]) { el.src = CHARA_IMGS[myPartner]; el.classList.remove("hidden"); }
+  else el.classList.add("hidden");
+}
+
+function buildCharaGrid() {
+  const grid = $("charaGrid");
+  grid.innerHTML = "";
+  CHARACTERS.forEach((c) => {
+    const b = document.createElement("button");
+    b.className = "chara-cell";
+    const im = document.createElement("img");
+    im.src = CHARA_IMGS[c.id] || "";
+    im.alt = c.name;
+    const sp = document.createElement("span");
+    sp.textContent = c.name;
+    b.appendChild(im);
+    b.appendChild(sp);
+    b.addEventListener("click", () => {
+      pendingChara = c;
+      $("charaConfirmImg").src = CHARA_IMGS[c.id] || "";
+      $("charaConfirmName").textContent = c.name;
+      show("charaConfirmCard");
+      S.playClick();
+    });
+    grid.appendChild(b);
+  });
+}
+
+$("charaNoBtn").addEventListener("click", () => { show("charaCard"); });
+$("charaYesBtn").addEventListener("click", async () => {
+  if (!pendingChara) return;
+  myPartner = pendingChara.id;
+  choosing = false;
+  try {
+    await setDoc(doc(db, "teachers", room.teacherId, "students", nickname), { partner: myPartner }, { merge: true });
+    await updateDoc(doc(db, "rooms", roomCode, "players", nickname), { partner: myPartner });
+  } catch (e) { /* 保存に失敗しても表示は続ける */ }
+  S.playJoin();
+  render();
+});
+
 async function joinAs(nick) {
   nickname = nick;
   localStorage.setItem("sodakui_nickname", nickname);
+  // パートナーは先生側の生徒データに保存されている。未選択なら選択画面を出す
+  let partner = null;
+  try {
+    const stu = await getDoc(doc(db, "teachers", room.teacherId, "students", nickname));
+    if (stu.exists()) partner = stu.data().partner || null;
+  } catch (e) { /* 読めなければ選択画面を出す */ }
+  myPartner = partner;
+  choosing = !partner;
   await setDoc(doc(db, "rooms", roomCode, "players", nickname),
-    { joinedAt: Date.now() }, { merge: true });
+    { joinedAt: Date.now(), partner: partner || null }, { merge: true });
   // リロード復帰用に、自分の過去の回答を読み直す
   const roomSnap = await getDoc(doc(db, "rooms", roomCode));
   room = roomSnap.data();
@@ -134,9 +199,14 @@ async function joinAs(nick) {
     const a = await getDoc(doc(db, "rooms", roomCode, "answers", nickname + "_" + i));
     if (a.exists()) myChoices[i] = a.data().choice;
   }
-  show("waitCard");
-  $("waitName").textContent = nickname;
-  $("waitText").textContent = "じゅんびちゅう…";
+  if (choosing) {
+    buildCharaGrid();
+    show("charaCard");
+  } else {
+    show("waitCard");
+    $("waitName").textContent = nickname;
+    $("waitText").textContent = "じゅんびちゅう…";
+  }
   onSnapshot(doc(db, "rooms", roomCode), (snap) => {
     if (!snap.exists()) return;
     room = snap.data();
@@ -162,10 +232,13 @@ async function joinAs(nick) {
 
 function render() {
   if (!room) return;
+  if (choosing) return; // キャラ選択中は画面を切り替えない
   if (room.status === "waiting") {
     document.body.className = "";
     show("waitCard");
     $("waitText").textContent = "じゅんびちゅう…";
+    $("waitName").textContent = nickname + " さん";
+    paintCharaImg($("waitChara"));
     return;
   }
   if (room.status === "finished" || room.status === "closed") {
@@ -176,6 +249,7 @@ function render() {
       return;
     }
     show("doneCard");
+    paintCharaImg($("certChara"));
     if (me && me.totalEarned !== undefined && allPlayers.length > 0) {
       const sorted = [...allPlayers].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
       const rank = sorted.findIndex((p) => p.nickname === nickname) + 1;
