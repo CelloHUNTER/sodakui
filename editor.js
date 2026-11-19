@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119h";
+import { firebaseConfig } from "./firebase-config.js?v=20261119i";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -81,7 +81,36 @@ async function showList() {
 }
 
 function blankQuestion() {
-  return { title: "", text: "", choices: ["", "", "", ""], answer: 0 };
+  return { title: "", text: "", choices: ["", "", "", ""], answer: 0, imageId: null };
+}
+
+// ===== 画像（絵本のページなど） =====
+const imgCache = {};
+async function loadEditorImage(imageId) {
+  if (!imageId) return null;
+  if (imgCache[imageId]) return imgCache[imageId];
+  const s = await getDoc(doc(db, "teachers", teacherUid, "images", imageId));
+  if (!s.exists()) return null;
+  imgCache[imageId] = s.data().data;
+  return imgCache[imageId];
+}
+function downscaleImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 900;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      resolve(cv.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 function openEditor(id, data) {
@@ -166,6 +195,39 @@ function renderQuestions() {
       }
       chBox.appendChild(row);
     });
+    const imgBox = document.createElement("div");
+    imgBox.className = "imgbox";
+    if (q.imageId) {
+      const im = document.createElement("img");
+      im.className = "qimg-thumb";
+      im.alt = "";
+      loadEditorImage(q.imageId).then((url) => { if (url) im.src = url; });
+      const rm = document.createElement("button");
+      rm.type = "button"; rm.className = "mini gray"; rm.textContent = "画像を外す";
+      rm.addEventListener("click", () => { q.imageId = null; renderQuestions(); });
+      imgBox.append(im, rm);
+    } else {
+      const add = document.createElement("button");
+      add.type = "button"; add.className = "mini sub"; add.textContent = "＋ 画像をつける（絵本のページなど）";
+      const file = document.createElement("input");
+      file.type = "file"; file.accept = "image/*"; file.className = "hidden";
+      add.addEventListener("click", () => file.click());
+      file.addEventListener("change", async () => {
+        if (!file.files || !file.files[0]) return;
+        add.textContent = "読み込み中…"; add.disabled = true;
+        try {
+          const dataUrl = await downscaleImage(file.files[0]);
+          const ref = await addDoc(collection(db, "teachers", teacherUid, "images"), { data: dataUrl, createdAt: Date.now() });
+          q.imageId = ref.id;
+          renderQuestions();
+        } catch (e) {
+          add.textContent = "＋ 画像をつける（絵本のページなど）"; add.disabled = false;
+          alert("画像を付けられませんでした");
+        }
+      });
+      imgBox.append(add, file);
+    }
+    card.appendChild(imgBox);
     card.appendChild(chBox);
     if (q.choices.length < 4) {
       const addc = document.createElement("button");
@@ -193,6 +255,33 @@ $("genBtn").addEventListener("click", () => {
   const inst = $("genInst").value.trim();
   const msg = $("genMsg");
   if (words.length === 0) { msg.textContent = "単語を入れてください"; return; }
+  if (type === "odd") {
+    const groups = $("genWords").value.split(/\n\s*\n/)
+      .map((g) => [...new Set(g.split(/\n/).map((s) => s.trim()).filter(Boolean))])
+      .filter((g) => g.length > 0);
+    const usable = groups.filter((g) => g.length >= 3);
+    const allWords = groups.flat();
+    if (groups.length < 2 || usable.length === 0) {
+      msg.textContent = "仲間外れには、空行で分けた2グループ以上（1グループ3語以上）が必要です";
+      return;
+    }
+    const oddText = inst && inst !== "○に はいるのは どれ？" ? inst : "仲間外れは どれ？";
+    const madeOdd = [];
+    for (const g of usable) {
+      const trio = shuffleArr(g).slice(0, 3);
+      const outsiders = allWords.filter((w) => !g.includes(w));
+      if (outsiders.length === 0) continue;
+      const oddOne = outsiders[Math.floor(Math.random() * outsiders.length)];
+      const choices = shuffleArr([...trio, oddOne]);
+      madeOdd.push({ title: "", text: oddText, choices, answer: choices.indexOf(oddOne), imageId: null });
+    }
+    if (madeOdd.length === 0) { msg.textContent = "作れる問題がありませんでした"; return; }
+    if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
+    questions = questions.concat(madeOdd);
+    renderQuestions();
+    msg.textContent = madeOdd.length + "問を追加しました";
+    return;
+  }
   const made = [];
   const skipped = [];
   for (const w of words) {
@@ -205,7 +294,7 @@ $("genBtn").addEventListener("click", () => {
       if (sh === w) { skipped.push(w); continue; }
       const others = shuffleArr(words.filter((x) => x !== w)).slice(0, 3);
       const choices = shuffleArr([w, ...others]);
-      made.push({ title: inst, text: sh, choices, answer: choices.indexOf(w) });
+      made.push({ title: inst, text: sh, choices, answer: choices.indexOf(w), imageId: null });
     } else {
       const pos = type === "first" ? 0 : type === "last" ? chars.length - 1 : Math.floor(chars.length / 2);
       if (chars.length < 2 || (type === "middle" && chars.length < 3)) { skipped.push(w); continue; }
@@ -222,7 +311,7 @@ $("genBtn").addEventListener("click", () => {
       }
       const choices = shuffleArr([correct, ...distract]);
       const disp = chars.map((c, i) => (i === pos ? "○" : c)).join("");
-      made.push({ title: inst, text: disp, choices, answer: choices.indexOf(correct) });
+      made.push({ title: inst, text: disp, choices, answer: choices.indexOf(correct), imageId: null });
     }
   }
   if (made.length === 0) { msg.textContent = "作れる問題がありませんでした（単語が短すぎる等）"; return; }
@@ -257,6 +346,16 @@ function renderPreview() {
   if (!q) return;
   $("pvTitle").textContent = q.title || "問題" + (previewIdx + 1);
   $("pvText").textContent = q.text || "（問題文が未入力）";
+  const pvImg = $("pvImg");
+  if (q.imageId) {
+    loadEditorImage(q.imageId).then((url) => {
+      if (url && questions[previewIdx] === q) { pvImg.src = url; pvImg.classList.remove("hidden"); }
+    });
+    pvImg.classList.add("hidden");
+  } else {
+    pvImg.classList.add("hidden");
+    pvImg.removeAttribute("src");
+  }
   const box = $("pvChoices");
   box.innerHTML = "";
   q.choices.forEach((c, i) => {
@@ -282,7 +381,8 @@ $("saveBtn").addEventListener("click", async () => {
       title: (q.title || "").trim(),
       text: q.text.trim(),
       choices: q.choices.map((c) => c.trim()),
-      answer: q.answer
+      answer: q.answer,
+      imageId: q.imageId || null
     })),
     archived: false,
     updatedAt: Date.now()

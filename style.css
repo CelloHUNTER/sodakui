@@ -135,3 +135,8 @@ body.ingame .footer-bar { margin-top: 8px; }
 .judge-mark { font-size: min(100px, 15vh); }
 .judge-msg { font-size: min(46px, 7.5vh); }
 .chara-big { width: min(180px, 26vh); height: min(180px, 26vh); }
+
+/* 画像問題 */
+.qimg { width: 100%; max-height: 36vh; object-fit: contain; border-radius: 12px; background: #fff; margin: 10px 0; }
+.qimg-thumb { width: 180px; height: auto; border-radius: 10px; display: block; margin-bottom: 8px; }
+.imgbox { margin: 12px 0; }
