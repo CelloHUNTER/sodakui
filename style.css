@@ -182,3 +182,6 @@ button:disabled { opacity: .45; }
 /* 編集画面：図形の調整バー（画面下に固定） */
 .markbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: #fff; border-top: 2px solid #e0dcd2; box-shadow: 0 -3px 12px rgba(0,0,0,.15); padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); }
 body.bar-open { padding-bottom: 215px; }
+
+.draftchip { background: #f4a259; color: #fff; border-radius: 6px; padding: 1px 7px; font-weight: 700; }
+.imgwrap.ed .qimg2 { width: 100%; }

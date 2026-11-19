@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119o";
+import { firebaseConfig } from "./firebase-config.js?v=20261119p";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -52,7 +52,7 @@ async function showList() {
     card.className = "card";
     const date = q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("ja-JP") : "";
     card.innerHTML = "<p class='big'>" + q.title + "</p><p class='note'>" +
-      (q.questions ? q.questions.length : 0) + "問　" + date + (q.draft ? "　・下書きあり" : "") + "</p>";
+      (q.questions ? q.questions.length : 0) + "問　" + date + (q.draft ? "　<span class='draftchip'>下書きあり</span>" : "") + "</p>";
     const row = document.createElement("div");
     row.className = "row";
     const edit = document.createElement("button");
@@ -131,6 +131,18 @@ function openEditor(id, data) {
       srcData = { title: data.draft.title, questions: data.draft.questions };
     }
   }
+  if (id && srcData === data) {
+    // クラウドの下書きが無い場合は、この端末に残った下書きも確認する
+    try {
+      const lm = JSON.parse(localStorage.getItem("sodakui_draft_" + id) || "null");
+      if (lm && lm.questions && lm.questions.length &&
+          JSON.stringify(lm.questions) !== JSON.stringify((srcData && srcData.questions) || [])) {
+        if (confirm("この端末に下書きが残っています。下書きから続けますか？")) {
+          srcData = { title: lm.title, questions: lm.questions };
+        }
+      }
+    } catch (e) { /* 読めなければ無視する */ }
+  }
   questions = JSON.parse(JSON.stringify(srcData && srcData.questions && srcData.questions.length ? srcData.questions : [blankQuestion()]));
   // 旧形式（answer が1つ）から新形式（answers の配列）へそろえる
   questions.forEach((q) => {
@@ -143,6 +155,7 @@ function openEditor(id, data) {
   });
   $("quizTitle").value = srcData ? srcData.title || "" : "";
   $("saveMsg").textContent = "";
+  $("draftMsg").textContent = "";
   previewIdx = 0;
   $("previewBox").classList.add("hidden");
   $("listView").classList.add("hidden");
@@ -179,6 +192,9 @@ function paintMarks(layer, masks, hints) {
 
 // ===== マスク・ヒント図形の編集 =====
 let selMark = null; // {q, kind: "mask"|"hint", i}
+let showMasksEd = true;
+let showHintsEd = true;
+const imgAspectCache = {};
 let dragMark = null;
 
 // ===== 編集の履歴（もどる/すすむ）=====
@@ -253,8 +269,8 @@ function repaintEditorMarks(qi) {
   if (!layer) return;
   layer.innerHTML = "";
   const q = questions[qi];
-  (q.masks || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "mask", m, i)));
-  (q.hints || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "hint", m, i)));
+  if (showMasksEd) (q.masks || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "mask", m, i)));
+  if (showHintsEd) (q.hints || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "hint", m, i)));
 }
 function syncMarkEl(qi) {
   if (!selMark || selMark.q !== qi) return;
@@ -272,7 +288,7 @@ function syncMarkEl(qi) {
   const sp = el.querySelector(".mq");
   if (sp) sp.style.transform = "rotate(" + (-(m.rot || 0)) + "deg)";
 }
-function sliderRow(label, val, min, max, fn) {
+function sliderRow(label, val, min, max, fn, step) {
   const div = document.createElement("div");
   div.className = "slider-row";
   const lab = document.createElement("span");
@@ -285,7 +301,23 @@ function sliderRow(label, val, min, max, fn) {
   let preSnap = null, preVal = val;
   inp.addEventListener("pointerdown", () => { preSnap = snapState(); preVal = Number(inp.value); });
   inp.addEventListener("change", () => { if (preSnap && Number(inp.value) !== preVal) pushSnap(preSnap); preSnap = null; });
-  div.append(lab, inp, num);
+  const st = step || 1;
+  const stepBy = (d) => {
+    const nv = Math.max(min, Math.min(max, Number(inp.value) + d));
+    if (nv === Number(inp.value)) return;
+    pushHistory();
+    inp.value = nv;
+    num.textContent = nv;
+    fn(nv);
+    scheduleDraft();
+  };
+  const minus = document.createElement("button");
+  minus.type = "button"; minus.className = "mini gray"; minus.textContent = "−";
+  minus.addEventListener("click", () => stepBy(-st));
+  const plus = document.createElement("button");
+  plus.type = "button"; plus.className = "mini gray"; plus.textContent = "＋";
+  plus.addEventListener("click", () => stepBy(st));
+  div.append(lab, minus, inp, plus, num);
   return div;
 }
 function mkMiniBtn(label, cls, fn) {
@@ -303,23 +335,34 @@ let draftTimer = null;
 function scheduleDraft() {
   if (!draftReady) return;
   clearTimeout(draftTimer);
-  draftTimer = setTimeout(saveDraft, 2500);
+  draftTimer = setTimeout(saveDraft, 1200);
 }
 async function saveDraft() {
   if (!draftReady || !teacherUid) return;
   const str = snapState();
   if (str === baselineStr) return;
   const o = JSON.parse(str);
+  const dm = $("draftMsg");
+  // まず端末内に控えを残す（こちらは即時に書ける）
   try {
-    if (currentId) {
-      await updateDoc(doc(db, "teachers", teacherUid, "quizzes", currentId), {
-        draft: { title: o.title, questions: o.questions, updatedAt: Date.now() }
-      });
-    } else {
-      localStorage.setItem("sodakui_draft_new", JSON.stringify({ title: o.title, questions: o.questions, updatedAt: Date.now() }));
-    }
-  } catch (e) { /* 下書きが保存できない環境では無視する */ }
+    localStorage.setItem("sodakui_draft_" + (currentId || "new"),
+      JSON.stringify({ title: o.title, questions: o.questions, updatedAt: Date.now() }));
+  } catch (e) { /* 端末に書けない環境では無視する */ }
+  if (!currentId) {
+    if (dm) dm.textContent = "下書きを保存しました（この端末） " + new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+    return;
+  }
+  try {
+    await updateDoc(doc(db, "teachers", teacherUid, "quizzes", currentId), {
+      draft: { title: o.title, questions: o.questions, updatedAt: Date.now() }
+    });
+    if (dm) dm.textContent = "下書きを保存しました " + new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    if (dm) dm.textContent = "下書きをクラウドに保存できませんでした（この端末には保存済み）";
+  }
 }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraft(); });
+window.addEventListener("pagehide", () => { saveDraft(); });
 window.addEventListener("beforeunload", (e) => {
   if (draftReady && !$("editView").classList.contains("hidden") && snapState() !== baselineStr) {
     e.preventDefault();
@@ -343,6 +386,7 @@ function iconBtn(ic, cap, fn) {
 function buildMarkCtl() {
   const bar = $("markBar");
   if (!bar) return;
+  const keepY = window.scrollY;
   bar.innerHTML = "";
   const q = selMark && questions[selMark.q];
   const arr = q && (selMark.kind === "mask" ? (q.masks || []) : (q.hints || []));
@@ -350,6 +394,7 @@ function buildMarkCtl() {
   if (!q || !m) {
     bar.classList.add("hidden");
     document.body.classList.remove("bar-open");
+    window.scrollTo(0, keepY);
     return;
   }
   bar.classList.remove("hidden");
@@ -362,7 +407,7 @@ function buildMarkCtl() {
   bar.appendChild(title);
   bar.appendChild(sliderRow("横幅", m.w, 5, 100, (v) => { m.w = v; syncMarkEl(qi); scheduleDraft(); }));
   bar.appendChild(sliderRow("高さ", m.h, 5, 100, (v) => { m.h = v; syncMarkEl(qi); scheduleDraft(); }));
-  bar.appendChild(sliderRow("回転", m.rot || 0, 0, 360, (v) => { m.rot = v; syncMarkEl(qi); scheduleDraft(); }));
+  bar.appendChild(sliderRow("回転", m.rot || 0, 0, 360, (v) => { m.rot = v; syncMarkEl(qi); scheduleDraft(); }, 2));
   const row = document.createElement("div");
   row.className = "row";
   if (selMark.kind === "mask") {
@@ -395,6 +440,7 @@ function buildMarkCtl() {
     buildMarkCtl();
   }));
   bar.appendChild(row);
+  window.scrollTo(0, keepY);
 }
 
 function wrapAspect(qi) {
@@ -423,8 +469,6 @@ function addMark(qi, kind, shape) {
     selMark = { q: qi, kind, i: q.hints.length - 1 };
   }
   renderQuestions();
-  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
-  if (layer) layer.parentElement.scrollIntoView({ block: "center" });
 }
 
 function renderQuestions() {
@@ -517,12 +561,16 @@ function renderQuestions() {
       const im = document.createElement("img");
       im.className = "qimg2";
       im.alt = "";
+      if (imgAspectCache[q.imageId]) im.style.aspectRatio = imgAspectCache[q.imageId];
+      im.addEventListener("load", () => {
+        if (im.naturalWidth && im.naturalHeight) imgAspectCache[q.imageId] = im.naturalWidth + " / " + im.naturalHeight;
+      });
       loadEditorImage(q.imageId).then((url) => { if (url) im.src = url; });
       const layer = document.createElement("div");
       layer.className = "marks";
       layer.dataset.q = qi;
-      (q.masks || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "mask", m, mi)));
-      (q.hints || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "hint", m, mi)));
+      if (showMasksEd) (q.masks || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "mask", m, mi)));
+      if (showHintsEd) (q.hints || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "hint", m, mi)));
       wrap.append(im, layer);
       imgBox.appendChild(wrap);
       const g1 = document.createElement("p");
@@ -555,7 +603,21 @@ function renderQuestions() {
       const rm = document.createElement("button");
       rm.type = "button"; rm.className = "mini gray"; rm.textContent = "画像を外す";
       rm.addEventListener("click", () => { pushHistory(); q.imageId = null; q.masks = []; q.hints = []; if (selMark && selMark.q === qi) selMark = null; renderQuestions(); });
-      imgBox.append(g1, note1, row1, g2, note2, row2, rm);
+      const viewRow = document.createElement("div");
+      viewRow.className = "row";
+      viewRow.append(
+        mkBtn("マスク表示：" + (showMasksEd ? "オン" : "オフ"), "gray", () => { showMasksEd = !showMasksEd; renderQuestions(); }),
+        mkBtn("ヒント表示：" + (showHintsEd ? "オン" : "オフ"), "gray", () => { showHintsEd = !showHintsEd; renderQuestions(); }),
+        mkBtn("図形を全部消す", "delbtn", () => {
+          if (!(q.masks && q.masks.length) && !(q.hints && q.hints.length)) return;
+          pushHistory();
+          q.masks = [];
+          q.hints = [];
+          if (selMark && selMark.q === qi) selMark = null;
+          renderQuestions();
+        })
+      );
+      imgBox.append(viewRow, g1, note1, row1, g2, note2, row2, rm);
     } else {
       const add = document.createElement("button");
       add.type = "button"; add.className = "mini sub"; add.textContent = "＋ 画像をつける（絵本のページなど）";
@@ -775,7 +837,10 @@ $("saveBtn").addEventListener("click", async () => {
     }
     baselineStr = snapState();
     draftReady = false;
-    try { localStorage.removeItem("sodakui_draft_new"); } catch (e) { /* 無視 */ }
+    try {
+      localStorage.removeItem("sodakui_draft_new");
+      if (currentId) localStorage.removeItem("sodakui_draft_" + currentId);
+    } catch (e) { /* 無視 */ }
     msg.textContent = "保存しました";
     setTimeout(showList, 600);
   } catch (e) {
