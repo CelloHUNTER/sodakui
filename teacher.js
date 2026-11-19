@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119i";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119i";
-import * as S from "./sound.js?v=20261119i";
+import { firebaseConfig } from "./firebase-config.js?v=20261119j";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119j";
+import * as S from "./sound.js?v=20261119j";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -56,6 +56,13 @@ const scoringReview = new Set();
 
 const quizSelect = $("quizSelect");
 let quizCache = {}; // 自分のクイズ（id -> クイズ本体、答え含む）
+// 正解は複数ありうる。旧形式（answer が1つ）も読み取れるようにする
+function answersOf(q) {
+  if (!q) return [0];
+  if (Array.isArray(q.answers) && q.answers.length) return q.answers;
+  return [typeof q.answer === "number" ? q.answer : 0];
+}
+
 function getQuizData(id) {
   return SAMPLE_QUIZZES.find((q) => q.id === id) || quizCache[id] || null;
 }
@@ -288,7 +295,7 @@ $("createRoomBtn").addEventListener("click", async () => {
     teacherId: uid, quizId: quiz.id, quizTitle: quiz.title,
     questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices, imageId: q.imageId || null })),
     roster, status: "waiting", phase: "lobby", currentIndex: 0,
-    answerIndex: null, scoredQ: [], scored: false, createdAt: Date.now()
+    answerIndex: null, answerIndexes: [], scoredQ: [], scored: false, createdAt: Date.now()
   });
   $("setupCard").classList.add("hidden");
   $("roomCard").classList.remove("hidden");
@@ -509,7 +516,7 @@ function renderDisplay() {
     const d = document.createElement("div");
     d.className = "dchoice c" + i;
     if (room.phase === "reveal") {
-      if (i === room.answerIndex) d.classList.add("correct");
+      if ((room.answerIndexes && room.answerIndexes.length ? room.answerIndexes : [room.answerIndex]).includes(i)) d.classList.add("correct");
       else d.classList.add("dim");
     }
     if (room.hint && room.hint.q === idx && room.hint.hidden.includes(i)) d.classList.add("hinted");
@@ -518,8 +525,9 @@ function renderDisplay() {
   });
   $("hintBtn").classList.toggle("hidden", !(room.phase === "question" && !(room.hint && room.hint.q === idx)));
   const dAns = $("dAnswer");
-  if (room.phase === "reveal" && room.answerIndex !== null && room.answerIndex !== undefined) {
-    dAns.textContent = "こたえ：" + SYMBOLS[room.answerIndex] + " " + q.choices[room.answerIndex];
+  const dispIdxs = room.answerIndexes && room.answerIndexes.length ? room.answerIndexes : (room.answerIndex != null ? [room.answerIndex] : []);
+  if (room.phase === "reveal" && dispIdxs.length) {
+    dAns.textContent = "こたえ：" + dispIdxs.map((ai) => SYMBOLS[ai] + " " + q.choices[ai]).join("、");
     dAns.classList.remove("hidden");
   } else {
     dAns.classList.add("hidden");
@@ -639,7 +647,8 @@ async function reveal() {
   try {
     const idx = room.currentIndex;
     const quiz = getQuizData(room.quizId);
-    const answerIndex = quiz.questions[idx].answer;
+    const answerIndexes = answersOf(quiz.questions[idx]);
+    const answerIndex = answerIndexes[0];
     const fresh = (await getDoc(doc(db, "rooms", roomCode))).data();
     if (!(fresh.scoredQ || []).includes(idx)) {
       const ansSnap = await getDocs(collection(db, "rooms", roomCode, "answers"));
@@ -651,7 +660,7 @@ async function reveal() {
       for (const p of playersCache) {
         const choice = byNick[p.nickname];
         const answered = choice !== undefined;
-        const correct = answered && choice === answerIndex;
+        const correct = answered && answerIndexes.includes(choice);
         const earned = (answered ? POINTS_JOIN : 0) + (correct ? POINTS_CORRECT : 0);
         await updateDoc(doc(db, "rooms", roomCode, "players", p.nickname), {
           totalEarned: increment(earned),
@@ -661,7 +670,7 @@ async function reveal() {
       }
       await updateDoc(doc(db, "rooms", roomCode), { scoredQ: arrayUnion(idx) });
     }
-    await updateDoc(doc(db, "rooms", roomCode), { phase: "reveal", answerIndex });
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "reveal", answerIndex, answerIndexes });
   } finally {
     revealing = false;
   }
@@ -684,10 +693,10 @@ $("hintBtn").addEventListener("click", async () => {
   const quiz = getQuizData(room.quizId);
   if (!quiz) return;
   const idx = room.currentIndex;
-  const ans = quiz.questions[idx].answer;
-  const wrong = room.questions[idx].choices.map((_, i) => i).filter((i) => i !== ans);
-  if (wrong.length < 2) return; // 選択肢が少ない問題ではヒントを使わない
-  // 間違いの選択肢から2つを消す
+  const ansSet = answersOf(quiz.questions[idx]);
+  const wrong = room.questions[idx].choices.map((_, i) => i).filter((i) => !ansSet.includes(i));
+  if (wrong.length === 0) return;
+  // 間違いの選択肢から最大2つを消す
   const hidden = wrong.sort(() => Math.random() - 0.5).slice(0, 2);
   await updateDoc(doc(db, "rooms", roomCode), { hint: { q: idx, hidden } });
 });
@@ -695,7 +704,7 @@ $("hintBtn").addEventListener("click", async () => {
 $("nextBtn").addEventListener("click", async () => {
   const idx = room.currentIndex;
   if (idx < room.questions.length - 1) {
-    await updateDoc(doc(db, "rooms", roomCode), { phase: "title", currentIndex: idx + 1, answerIndex: null, hint: null });
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "title", currentIndex: idx + 1, answerIndex: null, answerIndexes: [], hint: null });
   } else {
     await finishRoom();
   }
@@ -722,7 +731,7 @@ async function finishRoom() {
       const detail = room.questions.map((_, qi) => {
         const mine = byNickQ[p.nickname] || {};
         const choice = mine[qi] !== undefined ? mine[qi] : null;
-        return { q: qi, choice, correct: !!(quiz && choice !== null && choice === quiz.questions[qi].answer) };
+        return { q: qi, choice, correct: !!(quiz && choice !== null && answersOf(quiz.questions[qi]).includes(choice)) };
       });
       await setDoc(doc(db, "teachers", uid, "records", roomCode + "_" + p.nickname), {
         date: new Date().toISOString(), roomCode, quizId: room.quizId, quizTitle: room.quizTitle || "", nickname: p.nickname,
@@ -733,7 +742,7 @@ async function finishRoom() {
     await updateDoc(ref, { scored: true });
   }
   // 終了後は復習のために答えを部屋へ公開する（ゲーム中は渡さない）
-  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false, keys: quizK ? quizK.questions.map((q) => q.answer) : [] });
+  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false, keys: quizK ? quizK.questions.map((q) => answersOf(q)) : [] });
 }
 
 // ===== 結果発表（表彰台） =====
@@ -917,7 +926,7 @@ async function maybeScoreReview(code, id, data) {
       }
       const quiz = await ensureQuiz(data.quizId);
       const detail = (data.answers || []).map((choice, qi) => ({
-        q: qi, choice, correct: !!(quiz && choice === quiz.questions[qi].answer)
+        q: qi, choice, correct: !!(quiz && answersOf(quiz.questions[qi]).includes(choice))
       }));
       await setDoc(doc(db, "teachers", uid, "records", code + "_review_" + data.nickname + "_" + data.quizId), {
         date: new Date().toISOString(), roomCode: code, quizId: data.quizId, quizTitle: data.title || "",

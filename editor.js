@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119i";
+import { firebaseConfig } from "./firebase-config.js?v=20261119j";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -81,7 +81,7 @@ async function showList() {
 }
 
 function blankQuestion() {
-  return { title: "", text: "", choices: ["", "", "", ""], answer: 0, imageId: null };
+  return { title: "", text: "", choices: ["", "", "", ""], answers: [0], imageId: null };
 }
 
 // ===== 画像（絵本のページなど） =====
@@ -116,6 +116,13 @@ function downscaleImage(file) {
 function openEditor(id, data) {
   currentId = id;
   questions = JSON.parse(JSON.stringify(data && data.questions && data.questions.length ? data.questions : [blankQuestion()]));
+  // 旧形式（answer が1つ）から新形式（answers の配列）へそろえる
+  questions.forEach((q) => {
+    if (!Array.isArray(q.answers) || q.answers.length === 0) {
+      q.answers = [typeof q.answer === "number" ? q.answer : 0];
+    }
+    delete q.answer;
+  });
   $("quizTitle").value = data ? data.title || "" : "";
   $("saveMsg").textContent = "";
   previewIdx = 0;
@@ -178,17 +185,23 @@ function renderQuestions() {
       input.addEventListener("input", () => { q.choices[ci] = input.value; });
       const ans = document.createElement("button");
       ans.type = "button";
-      ans.className = "mini ansbtn" + (q.answer === ci ? " on" : "");
-      ans.textContent = q.answer === ci ? "正解" : "正解にする";
-      ans.addEventListener("click", () => { q.answer = ci; renderQuestions(); });
+      const isAns = (q.answers || []).includes(ci);
+      ans.className = "mini ansbtn" + (isAns ? " on" : "");
+      ans.textContent = isAns ? "正解" : "正解にする";
+      ans.addEventListener("click", () => {
+        const set = new Set(q.answers || []);
+        if (set.has(ci)) { if (set.size > 1) set.delete(ci); } else { set.add(ci); }
+        q.answers = [...set].sort((a, b) => a - b);
+        renderQuestions();
+      });
       row.append(dot, input, ans);
       if (q.choices.length > 2) {
         const delc = document.createElement("button");
         delc.type = "button"; delc.className = "mini gray"; delc.textContent = "×";
         delc.addEventListener("click", () => {
           q.choices.splice(ci, 1);
-          if (q.answer >= q.choices.length) q.answer = 0;
-          if (q.answer === ci) q.answer = 0;
+          q.answers = (q.answers || []).filter((a) => a !== ci).map((a) => (a > ci ? a - 1 : a));
+          if (q.answers.length === 0) q.answers = [0];
           renderQuestions();
         });
         row.appendChild(delc);
@@ -273,7 +286,7 @@ $("genBtn").addEventListener("click", () => {
       if (outsiders.length === 0) continue;
       const oddOne = outsiders[Math.floor(Math.random() * outsiders.length)];
       const choices = shuffleArr([...trio, oddOne]);
-      madeOdd.push({ title: "", text: oddText, choices, answer: choices.indexOf(oddOne), imageId: null });
+      madeOdd.push({ title: "", text: oddText, choices, answers: [choices.indexOf(oddOne)], imageId: null });
     }
     if (madeOdd.length === 0) { msg.textContent = "作れる問題がありませんでした"; return; }
     if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
@@ -294,7 +307,7 @@ $("genBtn").addEventListener("click", () => {
       if (sh === w) { skipped.push(w); continue; }
       const others = shuffleArr(words.filter((x) => x !== w)).slice(0, 3);
       const choices = shuffleArr([w, ...others]);
-      made.push({ title: inst, text: sh, choices, answer: choices.indexOf(w), imageId: null });
+      made.push({ title: inst, text: sh, choices, answers: [choices.indexOf(w)], imageId: null });
     } else {
       const pos = type === "first" ? 0 : type === "last" ? chars.length - 1 : Math.floor(chars.length / 2);
       if (chars.length < 2 || (type === "middle" && chars.length < 3)) { skipped.push(w); continue; }
@@ -311,7 +324,7 @@ $("genBtn").addEventListener("click", () => {
       }
       const choices = shuffleArr([correct, ...distract]);
       const disp = chars.map((c, i) => (i === pos ? "○" : c)).join("");
-      made.push({ title: inst, text: disp, choices, answer: choices.indexOf(correct), imageId: null });
+      made.push({ title: inst, text: disp, choices, answers: [choices.indexOf(correct)], imageId: null });
     }
   }
   if (made.length === 0) { msg.textContent = "作れる問題がありませんでした（単語が短すぎる等）"; return; }
@@ -381,7 +394,7 @@ $("saveBtn").addEventListener("click", async () => {
       title: (q.title || "").trim(),
       text: q.text.trim(),
       choices: q.choices.map((c) => c.trim()),
-      answer: q.answer,
+      answers: q.answers && q.answers.length ? q.answers : [0],
       imageId: q.imageId || null
     })),
     archived: false,
