@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119k";
+import { firebaseConfig } from "./firebase-config.js?v=20261119l";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -78,6 +78,7 @@ async function showList() {
     card.appendChild(row);
     box.appendChild(card);
   });
+  window.scrollTo(0, keepY);
 }
 
 function blankQuestion() {
@@ -273,9 +274,12 @@ function addMark(qi, kind, shape) {
     selMark = { q: qi, kind, i: q.hints.length - 1 };
   }
   renderQuestions();
+  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
+  if (layer) layer.parentElement.scrollIntoView({ block: "center" });
 }
 
 function renderQuestions() {
+  const keepY = window.scrollY;
   const box = $("questionsBox");
   box.innerHTML = "";
   questions.forEach((q, qi) => {
