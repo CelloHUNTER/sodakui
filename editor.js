@@ -5,7 +5,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119j";
+import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -81,7 +81,7 @@ async function showList() {
 }
 
 function blankQuestion() {
-  return { title: "", text: "", choices: ["", "", "", ""], answers: [0], imageId: null };
+  return { title: "", text: "", choices: ["", "", "", ""], answers: [0], imageId: null, masks: [], hints: [] };
 }
 
 // ===== 画像（絵本のページなど） =====
@@ -114,6 +114,7 @@ function downscaleImage(file) {
 }
 
 function openEditor(id, data) {
+  selMark = null;
   currentId = id;
   questions = JSON.parse(JSON.stringify(data && data.questions && data.questions.length ? data.questions : [blankQuestion()]));
   // 旧形式（answer が1つ）から新形式（answers の配列）へそろえる
@@ -122,6 +123,8 @@ function openEditor(id, data) {
       q.answers = [typeof q.answer === "number" ? q.answer : 0];
     }
     delete q.answer;
+    if (!Array.isArray(q.masks)) q.masks = [];
+    if (!Array.isArray(q.hints)) q.hints = [];
   });
   $("quizTitle").value = data ? data.title || "" : "";
   $("saveMsg").textContent = "";
@@ -129,6 +132,146 @@ function openEditor(id, data) {
   $("previewBox").classList.add("hidden");
   $("listView").classList.add("hidden");
   $("editView").classList.remove("hidden");
+  renderQuestions();
+}
+
+
+function markEl(m, isHint) {
+  const d = document.createElement("div");
+  d.className = "mark " + (isHint ? "hintm " + m.kind : "maskm " + m.shape);
+  d.style.left = m.x + "%";
+  d.style.top = m.y + "%";
+  d.style.width = m.w + "%";
+  d.style.height = m.h + "%";
+  d.style.transform = "rotate(" + (m.rot || 0) + "deg)";
+  if (!isHint && m.qmark !== false) {
+    const s = document.createElement("span");
+    s.className = "mq";
+    s.style.transform = "rotate(" + (-(m.rot || 0)) + "deg)";
+    s.textContent = "？";
+    d.appendChild(s);
+  }
+  return d;
+}
+function paintMarks(layer, masks, hints) {
+  if (!layer) return;
+  layer.innerHTML = "";
+  (masks || []).forEach((m) => layer.appendChild(markEl(m, false)));
+  (hints || []).forEach((m) => layer.appendChild(markEl(m, true)));
+}
+
+// ===== マスク・ヒント図形の編集 =====
+let selMark = null; // {q, kind: "mask"|"hint", i}
+let dragMark = null;
+
+function editorMarkEl(qi, kind, m, i) {
+  const d = markEl(m, kind === "hint");
+  if (selMark && selMark.q === qi && selMark.kind === kind && selMark.i === i) d.classList.add("sel");
+  d.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    selMark = { q: qi, kind, i };
+    document.querySelectorAll(".imgwrap.ed .mark").forEach((el) => el.classList.remove("sel"));
+    d.classList.add("sel");
+    document.querySelectorAll(".markctl").forEach((c) => buildMarkCtl(Number(c.dataset.q), c));
+    const wrap = d.parentElement.parentElement;
+    dragMark = { qi, kind, i, rect: wrap.getBoundingClientRect(), startX: ev.clientX, startY: ev.clientY, origX: m.x, origY: m.y, el: d };
+  });
+  return d;
+}
+window.addEventListener("pointermove", (ev) => {
+  if (!dragMark) return;
+  const q = questions[dragMark.qi];
+  if (!q) return;
+  const arr = dragMark.kind === "mask" ? q.masks : q.hints;
+  const m = arr && arr[dragMark.i];
+  if (!m) return;
+  m.x = Math.max(0, Math.min(100 - m.w, dragMark.origX + (ev.clientX - dragMark.startX) / dragMark.rect.width * 100));
+  m.y = Math.max(0, Math.min(100 - m.h, dragMark.origY + (ev.clientY - dragMark.startY) / dragMark.rect.height * 100));
+  dragMark.el.style.left = m.x + "%";
+  dragMark.el.style.top = m.y + "%";
+});
+window.addEventListener("pointerup", () => { dragMark = null; });
+
+function repaintEditorMarks(qi) {
+  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
+  if (!layer) return;
+  layer.innerHTML = "";
+  const q = questions[qi];
+  (q.masks || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "mask", m, i)));
+  (q.hints || []).forEach((m, i) => layer.appendChild(editorMarkEl(qi, "hint", m, i)));
+}
+function syncMarkEl(qi) {
+  if (!selMark || selMark.q !== qi) return;
+  const layer = document.querySelector('.marks[data-q="' + qi + '"]');
+  if (!layer) return;
+  const q = questions[qi];
+  const arr = selMark.kind === "mask" ? q.masks : q.hints;
+  const m = arr && arr[selMark.i];
+  const idx = selMark.kind === "mask" ? selMark.i : (q.masks || []).length + selMark.i;
+  const el = layer.children[idx];
+  if (!el || !m) return;
+  el.style.width = m.w + "%";
+  el.style.height = m.h + "%";
+  el.style.transform = "rotate(" + (m.rot || 0) + "deg)";
+  const sp = el.querySelector(".mq");
+  if (sp) sp.style.transform = "rotate(" + (-(m.rot || 0)) + "deg)";
+}
+function sliderRow(label, val, min, max, fn) {
+  const div = document.createElement("div");
+  div.className = "slider-row";
+  const lab = document.createElement("span");
+  lab.textContent = label;
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = min; inp.max = max; inp.value = val;
+  const num = document.createElement("span");
+  num.className = "note"; num.textContent = val;
+  inp.addEventListener("input", () => { num.textContent = inp.value; fn(Number(inp.value)); });
+  div.append(lab, inp, num);
+  return div;
+}
+function buildMarkCtl(qi, box) {
+  box.innerHTML = "";
+  if (!selMark || selMark.q !== qi) return;
+  const q = questions[qi];
+  const arr = selMark.kind === "mask" ? (q.masks || []) : (q.hints || []);
+  const m = arr[selMark.i];
+  if (!m) return;
+  const title = document.createElement("p");
+  title.className = "note";
+  title.textContent = (selMark.kind === "mask" ? "選んだマスクの調整" : "選んだヒント図形の調整") + "（ドラッグで移動）";
+  box.appendChild(title);
+  box.appendChild(sliderRow("横幅", m.w, 5, 100, (v) => { m.w = v; syncMarkEl(qi); }));
+  box.appendChild(sliderRow("高さ", m.h, 5, 100, (v) => { m.h = v; syncMarkEl(qi); }));
+  box.appendChild(sliderRow("回転", m.rot || 0, 0, 360, (v) => { m.rot = v; syncMarkEl(qi); }));
+  const row = document.createElement("div");
+  row.className = "row";
+  if (selMark.kind === "mask") {
+    row.appendChild(mkBtn(m.qmark === false ? "？を出す" : "？を消す", "sub", () => {
+      m.qmark = m.qmark === false ? true : false;
+      repaintEditorMarks(qi);
+      document.querySelectorAll(".markctl").forEach((c) => buildMarkCtl(Number(c.dataset.q), c));
+    }));
+  }
+  row.appendChild(mkBtn("この図形を消す", "sub danger", () => {
+    arr.splice(selMark.i, 1);
+    selMark = null;
+    renderQuestions();
+  }));
+  box.appendChild(row);
+}
+function addMark(qi, kind, shape) {
+  const q = questions[qi];
+  if (kind === "mask") {
+    q.masks = q.masks || [];
+    q.masks.push({ shape, x: 35, y: 30, w: 30, h: 30, rot: 0, qmark: true });
+    selMark = { q: qi, kind, i: q.masks.length - 1 };
+  } else {
+    q.hints = q.hints || [];
+    const defs = { arrow: [26, 18], fcircle: [32, 32], frect: [32, 26], ruler: [48, 11] };
+    const wh = defs[shape] || [30, 30];
+    q.hints.push({ kind: shape, x: 30, y: 40, w: wh[0], h: wh[1], rot: 0 });
+    selMark = { q: qi, kind, i: q.hints.length - 1 };
+  }
   renderQuestions();
 }
 
@@ -152,7 +295,7 @@ function renderQuestions() {
       mkBtn("↑", "gray", () => { if (qi > 0) { [questions[qi - 1], questions[qi]] = [questions[qi], questions[qi - 1]]; renderQuestions(); } }),
       mkBtn("↓", "gray", () => { if (qi < questions.length - 1) { [questions[qi + 1], questions[qi]] = [questions[qi], questions[qi + 1]]; renderQuestions(); } }),
       mkBtn("複製", "sub", () => { questions.splice(qi + 1, 0, JSON.parse(JSON.stringify(q))); renderQuestions(); }),
-      mkBtn("削除", "gray", () => { if (questions.length > 1) { questions.splice(qi, 1); renderQuestions(); } })
+      mkBtn("削除", "gray", () => { if (questions.length > 1) { questions.splice(qi, 1); if (selMark) { if (selMark.q === qi) selMark = null; else if (selMark.q > qi) selMark.q--; } renderQuestions(); } })
     );
     card.appendChild(head);
 
@@ -211,14 +354,42 @@ function renderQuestions() {
     const imgBox = document.createElement("div");
     imgBox.className = "imgbox";
     if (q.imageId) {
+      const wrap = document.createElement("div");
+      wrap.className = "imgwrap ed";
       const im = document.createElement("img");
-      im.className = "qimg-thumb";
+      im.className = "qimg2";
       im.alt = "";
       loadEditorImage(q.imageId).then((url) => { if (url) im.src = url; });
+      const layer = document.createElement("div");
+      layer.className = "marks";
+      layer.dataset.q = qi;
+      (q.masks || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "mask", m, mi)));
+      (q.hints || []).forEach((m, mi) => layer.appendChild(editorMarkEl(qi, "hint", m, mi)));
+      wrap.append(im, layer);
+      imgBox.appendChild(wrap);
+      const addRow = document.createElement("div");
+      addRow.className = "row";
+      addRow.append(
+        mkBtn("＋四角マスク", "sub", () => addMark(qi, "mask", "rect")),
+        mkBtn("＋丸マスク", "sub", () => addMark(qi, "mask", "circle")),
+        mkBtn("＋三角マスク", "sub", () => addMark(qi, "mask", "tri"))
+      );
+      const addRow2 = document.createElement("div");
+      addRow2.className = "row";
+      addRow2.append(
+        mkBtn("＋矢印ヒント", "sub", () => addMark(qi, "hint", "arrow")),
+        mkBtn("＋丸枠ヒント", "sub", () => addMark(qi, "hint", "fcircle")),
+        mkBtn("＋四角枠ヒント", "sub", () => addMark(qi, "hint", "frect")),
+        mkBtn("＋定規ヒント", "sub", () => addMark(qi, "hint", "ruler"))
+      );
+      const ctl = document.createElement("div");
+      ctl.className = "markctl";
+      ctl.dataset.q = qi;
+      buildMarkCtl(qi, ctl);
       const rm = document.createElement("button");
       rm.type = "button"; rm.className = "mini gray"; rm.textContent = "画像を外す";
-      rm.addEventListener("click", () => { q.imageId = null; renderQuestions(); });
-      imgBox.append(im, rm);
+      rm.addEventListener("click", () => { q.imageId = null; if (selMark && selMark.q === qi) selMark = null; renderQuestions(); });
+      imgBox.append(addRow, addRow2, ctl, rm);
     } else {
       const add = document.createElement("button");
       add.type = "button"; add.className = "mini sub"; add.textContent = "＋ 画像をつける（絵本のページなど）";
@@ -286,7 +457,7 @@ $("genBtn").addEventListener("click", () => {
       if (outsiders.length === 0) continue;
       const oddOne = outsiders[Math.floor(Math.random() * outsiders.length)];
       const choices = shuffleArr([...trio, oddOne]);
-      madeOdd.push({ title: "", text: oddText, choices, answers: [choices.indexOf(oddOne)], imageId: null });
+      madeOdd.push({ title: "", text: oddText, choices, answers: [choices.indexOf(oddOne)], imageId: null, masks: [], hints: [] });
     }
     if (madeOdd.length === 0) { msg.textContent = "作れる問題がありませんでした"; return; }
     if (questions.length === 1 && !questions[0].text && questions[0].choices.every((c) => !c)) questions = [];
@@ -307,7 +478,7 @@ $("genBtn").addEventListener("click", () => {
       if (sh === w) { skipped.push(w); continue; }
       const others = shuffleArr(words.filter((x) => x !== w)).slice(0, 3);
       const choices = shuffleArr([w, ...others]);
-      made.push({ title: inst, text: sh, choices, answers: [choices.indexOf(w)], imageId: null });
+      made.push({ title: inst, text: sh, choices, answers: [choices.indexOf(w)], imageId: null, masks: [], hints: [] });
     } else {
       const pos = type === "first" ? 0 : type === "last" ? chars.length - 1 : Math.floor(chars.length / 2);
       if (chars.length < 2 || (type === "middle" && chars.length < 3)) { skipped.push(w); continue; }
@@ -324,7 +495,7 @@ $("genBtn").addEventListener("click", () => {
       }
       const choices = shuffleArr([correct, ...distract]);
       const disp = chars.map((c, i) => (i === pos ? "○" : c)).join("");
-      made.push({ title: inst, text: disp, choices, answers: [choices.indexOf(correct)], imageId: null });
+      made.push({ title: inst, text: disp, choices, answers: [choices.indexOf(correct)], imageId: null, masks: [], hints: [] });
     }
   }
   if (made.length === 0) { msg.textContent = "作れる問題がありませんでした（単語が短すぎる等）"; return; }

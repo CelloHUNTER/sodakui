@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20261119j";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119j";
-import * as S from "./sound.js?v=20261119j";
+import { firebaseConfig } from "./firebase-config.js?v=20261119k";
+import { CHARA_IMGS } from "./characters-data.js?v=20261119k";
+import * as S from "./sound.js?v=20261119k";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
 const REVIEW_POINTS = 2; // ふくしゅうで正解1問あたりのポイント
@@ -61,6 +61,31 @@ function answersOf(q) {
   if (!q) return [0];
   if (Array.isArray(q.answers) && q.answers.length) return q.answers;
   return [typeof q.answer === "number" ? q.answer : 0];
+}
+
+
+function markEl(m, isHint) {
+  const d = document.createElement("div");
+  d.className = "mark " + (isHint ? "hintm " + m.kind : "maskm " + m.shape);
+  d.style.left = m.x + "%";
+  d.style.top = m.y + "%";
+  d.style.width = m.w + "%";
+  d.style.height = m.h + "%";
+  d.style.transform = "rotate(" + (m.rot || 0) + "deg)";
+  if (!isHint && m.qmark !== false) {
+    const s = document.createElement("span");
+    s.className = "mq";
+    s.style.transform = "rotate(" + (-(m.rot || 0)) + "deg)";
+    s.textContent = "？";
+    d.appendChild(s);
+  }
+  return d;
+}
+function paintMarks(layer, masks, hints) {
+  if (!layer) return;
+  layer.innerHTML = "";
+  (masks || []).forEach((m) => layer.appendChild(markEl(m, false)));
+  (hints || []).forEach((m) => layer.appendChild(markEl(m, true)));
 }
 
 function getQuizData(id) {
@@ -293,9 +318,9 @@ $("createRoomBtn").addEventListener("click", async () => {
   roomCode = makeCode();
   await setDoc(doc(db, "rooms", roomCode), {
     teacherId: uid, quizId: quiz.id, quizTitle: quiz.title,
-    questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices, imageId: q.imageId || null })),
+    questions: quiz.questions.map((q) => ({ title: q.title || "", text: q.text, choices: q.choices, imageId: q.imageId || null, masks: q.masks || [], hints: q.hints || [] })),
     roster, status: "waiting", phase: "lobby", currentIndex: 0,
-    answerIndex: null, answerIndexes: [], scoredQ: [], scored: false, createdAt: Date.now()
+    answerIndex: null, answerIndexes: [], imgHint: null, scoredQ: [], scored: false, createdAt: Date.now()
   });
   $("setupCard").classList.add("hidden");
   $("roomCard").classList.remove("hidden");
@@ -501,15 +526,19 @@ function renderDisplay() {
   }
   $("dText").textContent = q.text;
   const dImg = $("dImg");
+  const dWrap = $("dImgWrap");
   if (q.imageId) {
     loadRoomImage(q.imageId).then((url) => {
-      if (url && room && room.currentIndex === idx) { dImg.src = url; dImg.classList.remove("hidden"); }
+      if (url && room && room.currentIndex === idx) { dImg.src = url; dWrap.classList.remove("hidden"); }
     });
-    dImg.classList.add("hidden");
+    dWrap.classList.add("hidden");
   } else {
-    dImg.classList.add("hidden");
+    dWrap.classList.add("hidden");
     dImg.removeAttribute("src");
   }
+  paintMarks($("dMarks"),
+    room.phase === "question" ? (q.masks || []) : [],
+    room.phase === "question" && room.imgHint && room.imgHint.q === idx ? (q.hints || []) : []);
   const box = $("dChoices");
   box.innerHTML = "";
   q.choices.forEach((c, i) => {
@@ -690,6 +719,12 @@ $("showBtn").addEventListener("click", async () => {
 
 $("hintBtn").addEventListener("click", async () => {
   if (!room || room.phase !== "question") return;
+  // ヒント図形が置いてある問題では図形を出す（選択肢消しより優先）
+  const snapQ = room.questions[room.currentIndex];
+  if (snapQ.hints && snapQ.hints.length) {
+    await updateDoc(doc(db, "rooms", roomCode), { imgHint: { q: room.currentIndex } });
+    return;
+  }
   const quiz = getQuizData(room.quizId);
   if (!quiz) return;
   const idx = room.currentIndex;
@@ -704,7 +739,7 @@ $("hintBtn").addEventListener("click", async () => {
 $("nextBtn").addEventListener("click", async () => {
   const idx = room.currentIndex;
   if (idx < room.questions.length - 1) {
-    await updateDoc(doc(db, "rooms", roomCode), { phase: "title", currentIndex: idx + 1, answerIndex: null, answerIndexes: [], hint: null });
+    await updateDoc(doc(db, "rooms", roomCode), { phase: "title", currentIndex: idx + 1, answerIndex: null, answerIndexes: [], hint: null, imgHint: null });
   } else {
     await finishRoom();
   }
