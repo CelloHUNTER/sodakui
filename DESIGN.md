@@ -52,7 +52,8 @@
 
 ## キャラクター画像
 - リポジトリ内 assets/characters/ に置く。命名規則：{系統ID}_{段階}.png（例：cat_1.png, cat_2.png, cat_3.png）
-- 系統ID一覧：cat, dog, bird, train, truck, fire, police, sports, momotaro, kasajizo, tyrano, tricera, ptera, robot, puni
+- 系統ID一覧：cat, dog, bird, train, truck, fire, police, sports, momotaro, kasajizo, tyrano, tricera, ptera, robot, puni, tsuru, ushiwaka, fugu, bus
+  - 2026-11-19、子どもたちに一覧を見せて確認：当初15系統はOK、追加リクエストで鶴の恩返し（tsuru）・牛若丸（ushiwaka）・フグ（fugu）が入り全18系統に。その後バス（bus）も追加され全19系統
 - 最初は仮画像（単色の図形）で仕組みを完成させ、後から差し替える
 
 ## プロジェクト運用
@@ -93,7 +94,8 @@
 - 本番用ルールの下書きは firestore.rules、テストの下書きは tests/、移行手順は PRODUCTION.md
 - 開発プロジェクトは現在テストモード。本番使用前に必ず差し替えること
 
-### ふくしゅうモードと記録の詳細（2026-11-19追記）
-- ふくしゅう部屋：rooms に mode: "review" と quizzes（複数クイズの写し）を入れる。子どもは自分のペースで解き、答え合わせはその場で出る。そのため復習用の写しには答え（keys）を含める（本番モードでは従来通り答えを渡さない）。ポイントは正解1問2点、最初の完了1回だけ。採点と記録は先生の端末が行う
-- 進み具合は rooms/{roomCode}/review/{nickname}_{quizId}（answers, correctCount, done, scored）
+### ふくしゅうモードと記録の詳細（2026-11-19追記、復習は同日に方式変更）
+- 復習は「先生が部屋を用意する方式」をやめ、結果発表後のがんばりカードの下のボタンから入る方式に変更した。対象は間違えた問題と答えなかった問題だけ
+- ゲーム終了時に、先生の端末が答え（keys）を部屋へ公開する（ゲーム中は従来通り渡さない）。子どもは keys と自分の回答から対象問題を判定し、その場で答え合わせをしながら解き直す
+- ポイントは解き直して正解1問2点、最初の完了1回だけ。進み具合は rooms/{roomCode}/review/{nickname}_{quizId}（answers は全問ぶんの配列で未挑戦は null、correctCount, done, scored）。採点と記録は先生の端末が行う（先生画面を開いている間に付く）
 - 記録（records）には問題ごとの結果 detail（q, choice, correct）と区分 mode（live/review）を持ち、CSVには正答率と問題ごとの○×－を出す
