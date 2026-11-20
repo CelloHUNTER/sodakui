@@ -776,8 +776,15 @@ async function finishRoom() {
     }
     await updateDoc(ref, { scored: true });
   }
+  // まず結果発表へ切り替える（この後の保存で失敗しても発表には進めるように分ける）
+  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false });
   // 終了後は復習のために答えを部屋へ公開する（ゲーム中は渡さない）
-  await updateDoc(ref, { status: "finished", phase: "reveal", podium: 0, cardsShown: false, keys: quizK ? quizK.questions.map((q) => answersOf(q)) : [] });
+  // Firestoreは「配列の中の配列」を保存できないため、問題番号→答えの対応表（マップ）で保存する
+  if (quizK && quizK.questions && quizK.questions.length) {
+    const keysObj = {};
+    quizK.questions.forEach((q, i) => { keysObj[i] = answersOf(q); });
+    try { await updateDoc(ref, { keys: keysObj }); } catch (e) { console.error("答え一覧の保存に失敗", e); }
+  }
 }
 
 // ===== 結果発表（表彰台） =====
