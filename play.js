@@ -5,7 +5,7 @@ import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 // キャラ画像（約200KB）は入室を待たせないよう並行して読み込み、使う直前に待つ
 let CHARA_IMGS = {};
 let charaLoaded = false;
-const charaReady = import("./characters-data.js?v=20261119k")
+const charaReady = import("./characters-data.js?v=20261121b")
   .then((m) => { CHARA_IMGS = m.CHARA_IMGS || {}; charaLoaded = true; })
   .catch(() => { charaLoaded = true; });
 import * as S from "./sound.js?v=20261119k";
@@ -193,11 +193,61 @@ const CHARACTERS = [
 ];
 
 function paintCharaImg(el) {
-  if (myPartner && CHARA_IMGS[myPartner]) { el.src = CHARA_IMGS[myPartner]; el.classList.remove("hidden"); }
-  else {
+  if (myPartner && CHARA_IMGS[myPartner]) {
+    el.src = CHARA_IMGS[myPartner];
+    el.classList.remove("hidden");
+    startCharaAnim(el, myPartner);
+  } else {
     el.classList.add("hidden");
+    stopCharaAnim(el);
     if (myPartner && !charaLoaded) charaReady.then(() => paintCharaImg(el));
   }
+}
+
+// ===== キャラの動き（まばたき・個性コマ）=====
+// 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
+// タイミングはキャラごとにずらす。動くのは待ち画面とがんばりカードの大きなキャラだけ（paintCharaImg経由）。
+let CHARA_ANIM = {};
+const animReady = import("./characters-anim.js?v=20261121b")
+  .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
+  .catch(() => {});
+const animStates = new Map(); // img要素 -> { id, timers: [] }
+function stopCharaAnim(el) {
+  const st = animStates.get(el);
+  if (st) { st.timers.forEach((t) => clearTimeout(t)); animStates.delete(el); }
+}
+function startCharaAnim(el, id) {
+  const cur = animStates.get(el);
+  if (cur && cur.id === id) return;
+  stopCharaAnim(el);
+  if (!id) return;
+  const st = { id, timers: [] };
+  animStates.set(el, st);
+  const later = (fn, ms) => { st.timers.push(setTimeout(fn, ms)); };
+  const alive = () => animStates.get(el) === st;
+  const blinkLoop = () => {
+    if (!alive()) return;
+    const f = (CHARA_ANIM[id] || {}).blink;
+    if (f && !el.classList.contains("hidden")) {
+      el.src = f;
+      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, 150);
+    }
+    later(blinkLoop, 2500 + Math.random() * 2500);
+  };
+  const actLoop = () => {
+    if (!alive()) return;
+    const f = (CHARA_ANIM[id] || {}).act;
+    if (f && !el.classList.contains("hidden")) {
+      el.src = f;
+      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, 400 + Math.random() * 400);
+    }
+    later(actLoop, 7000 + Math.random() * 7000);
+  };
+  animReady.then(() => {
+    if (!alive()) return;
+    later(blinkLoop, 1000 + Math.random() * 2500);
+    later(actLoop, 3500 + Math.random() * 6000);
+  });
 }
 
 async function buildCharaGrid() {

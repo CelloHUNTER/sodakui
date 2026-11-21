@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js?v=20261119k";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119k";
+import { CHARA_IMGS } from "./characters-data.js?v=20261121b";
 import * as S from "./sound.js?v=20261119k";
 
 // 仮の数値（未決定）。後で設定で変えられるようにする。
