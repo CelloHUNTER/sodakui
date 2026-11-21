@@ -208,7 +208,7 @@ function paintCharaImg(el) {
 // 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
 // タイミングはキャラごとにバラバラにずらす（全員そろってまばたきしないように）。待ち画面・がんばりカード・キャラ選択画面で動く。
 let CHARA_ANIM = {};
-const animReady = import("./characters-anim.js?v=20261121i")
+const animReady = import("./characters-anim.js?v=20261121j")
   .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
   .catch(() => {});
 const animStates = new Map(); // img要素 -> { id, timers: [] }
@@ -234,23 +234,24 @@ function startCharaAnim(el, id) {
     }
     later(blinkLoop, 2500 + Math.random() * 2500);
   };
-  const playScene = (f) => {
+  const playScene = (f, hold) => {
     if (Array.isArray(f)) {
       // 複数コマ続きのモーション（桃太郎の誕生）: 150msずつ進み、最後のコマを少し長く見せる
       f.forEach((u, i) => { later(() => { if (alive()) el.src = u; }, i * 150); });
-      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, f.length * 150 + 350);
+      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, Math.max(f.length * 150 + 350, hold || 0));
     } else {
       el.src = f;
-      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, 400 + Math.random() * 400);
+      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, hold || (400 + Math.random() * 400));
     }
   };
   const actLoop = () => {
     if (!alive()) return;
     const A = CHARA_ANIM[id] || {};
-    // 個性コマが2種類あるキャラは、毎回ランダムでどちらかを見せる
-    const scenes = [A.act, A.act2, A.act3].filter(Boolean);
-    const f = scenes.length ? scenes[Math.floor(Math.random() * scenes.length)] : null;
-    if (f && !el.classList.contains("hidden")) playScene(f);
+    // 個性コマが複数あるキャラは、毎回ランダムでどれかを見せる
+    const scenes = [["act", A.act], ["act2", A.act2], ["act3", A.act3]].filter(([, v]) => Boolean(v));
+    const picked = scenes.length ? scenes[Math.floor(Math.random() * scenes.length)] : null;
+    // hold2 があるキャラ（笠地蔵の鳥）は、2つめの場面だけ長めに見せる
+    if (picked && !el.classList.contains("hidden")) playScene(picked[1], picked[0] === "act2" ? A.hold2 : null);
     // fast のキャラ（桃太郎・牛若丸・ぷにロボ）は個性コマの間隔を短めにする
     const base = A.fast ? 3500 : 7000;
     later(actLoop, base + Math.random() * base);
