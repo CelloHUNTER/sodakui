@@ -208,7 +208,7 @@ function paintCharaImg(el) {
 // 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
 // タイミングはキャラごとにバラバラにずらす（全員そろってまばたきしないように）。待ち画面・がんばりカード・キャラ選択画面で動く。
 let CHARA_ANIM = {};
-const animReady = import("./characters-anim.js?v=20261121c")
+const animReady = import("./characters-anim.js?v=20261121f")
   .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
   .catch(() => {});
 const animStates = new Map(); // img要素 -> { id, timers: [] }
@@ -234,13 +234,22 @@ function startCharaAnim(el, id) {
     }
     later(blinkLoop, 2500 + Math.random() * 2500);
   };
-  const actLoop = () => {
-    if (!alive()) return;
-    const f = (CHARA_ANIM[id] || {}).act;
-    if (f && !el.classList.contains("hidden")) {
+  const playScene = (f) => {
+    if (Array.isArray(f)) {
+      // 複数コマ続きのモーション（桃太郎の誕生）: 150msずつ進み、最後のコマを少し長く見せる
+      f.forEach((u, i) => { later(() => { if (alive()) el.src = u; }, i * 150); });
+      later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, f.length * 150 + 350);
+    } else {
       el.src = f;
       later(() => { if (alive() && CHARA_IMGS[id]) el.src = CHARA_IMGS[id]; }, 400 + Math.random() * 400);
     }
+  };
+  const actLoop = () => {
+    if (!alive()) return;
+    const A = CHARA_ANIM[id] || {};
+    // 個性コマが2種類あるキャラは、毎回ランダムでどちらかを見せる
+    const f = (A.act && A.act2) ? (Math.random() < 0.5 ? A.act : A.act2) : (A.act || A.act2);
+    if (f && !el.classList.contains("hidden")) playScene(f);
     later(actLoop, 7000 + Math.random() * 7000);
   };
   animReady.then(() => {
