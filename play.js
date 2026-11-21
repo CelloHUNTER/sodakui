@@ -2,7 +2,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js?v=20261119k";
-import { CHARA_IMGS } from "./characters-data.js?v=20261119k";
+// キャラ画像（約200KB）は入室を待たせないよう並行して読み込み、使う直前に待つ
+let CHARA_IMGS = {};
+let charaLoaded = false;
+const charaReady = import("./characters-data.js?v=20261119k")
+  .then((m) => { CHARA_IMGS = m.CHARA_IMGS || {}; charaLoaded = true; })
+  .catch(() => { charaLoaded = true; });
 import * as S from "./sound.js?v=20261119k";
 
 // 名前付きアプリに分けることで、同じブラウザでも先生側のログインと混ざらないようにする
@@ -189,10 +194,14 @@ const CHARACTERS = [
 
 function paintCharaImg(el) {
   if (myPartner && CHARA_IMGS[myPartner]) { el.src = CHARA_IMGS[myPartner]; el.classList.remove("hidden"); }
-  else el.classList.add("hidden");
+  else {
+    el.classList.add("hidden");
+    if (myPartner && !charaLoaded) charaReady.then(() => paintCharaImg(el));
+  }
 }
 
-function buildCharaGrid() {
+async function buildCharaGrid() {
+  await charaReady;
   const grid = $("charaGrid");
   grid.innerHTML = "";
   CHARACTERS.forEach((c) => {
@@ -242,15 +251,15 @@ async function joinAs(nick) {
   choosing = !partner;
   await setDoc(doc(db, "rooms", roomCode, "players", nickname),
     { joinedAt: Date.now(), partner: partner || null }, { merge: true });
-  // リロード復帰用に、自分の過去の回答を読み直す
-  const roomSnap = await getDoc(doc(db, "rooms", roomCode));
-  room = roomSnap.data();
-  for (let i = 0; i < (room.questions || []).length; i++) {
-    const a = await getDoc(doc(db, "rooms", roomCode, "answers", nickname + "_" + i));
-    if (a.exists()) myChoices[i] = a.data().choice;
+  // リロード復帰用に、自分の過去の回答を読み直す（部屋情報は入室時に取得済みのものを使う）
+  // 始まる前の部屋では回答は存在しないので省略。ある場合も全部まとめて同時に取る
+  if (room.status !== "waiting") {
+    const qs = room.questions || [];
+    const snaps = await Promise.all(qs.map((_, i) => getDoc(doc(db, "rooms", roomCode, "answers", nickname + "_" + i))));
+    snaps.forEach((a, i) => { if (a.exists()) myChoices[i] = a.data().choice; });
   }
   if (choosing) {
-    buildCharaGrid();
+    await buildCharaGrid();
     show("charaCard");
   } else {
     show("waitCard");
