@@ -95,7 +95,7 @@ button.mini { font-size: 14px; padding: 8px 12px; border-radius: 10px; }
 
 /* キャラ表示 */
 .chara-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
-.chara-cell { background: #fff; border: 3px solid #d8cfc0; border-radius: 14px; padding: 6px; cursor: pointer; }
+.chara-cell { background: #fff; color: #333; border: 3px solid #d8cfc0; border-radius: 14px; padding: 6px; cursor: pointer; }
 .chara-cell img { width: 100%; height: auto; display: block; }
 .chara-cell span { display: block; text-align: center; font-weight: bold; margin-top: 4px; font-size: 15px; }
 .chara-big { width: 180px; height: 180px; object-fit: contain; }

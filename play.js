@@ -5,7 +5,7 @@ import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 // キャラ画像（約200KB）は入室を待たせないよう並行して読み込み、使う直前に待つ
 let CHARA_IMGS = {};
 let charaLoaded = false;
-const charaReady = import("./characters-data.js?v=20261121b")
+const charaReady = import("./characters-data.js?v=20261121c")
   .then((m) => { CHARA_IMGS = m.CHARA_IMGS || {}; charaLoaded = true; })
   .catch(() => { charaLoaded = true; });
 import * as S from "./sound.js?v=20261119k";
@@ -208,7 +208,7 @@ function paintCharaImg(el) {
 // 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
 // タイミングはキャラごとにずらす。動くのは待ち画面とがんばりカードの大きなキャラだけ（paintCharaImg経由）。
 let CHARA_ANIM = {};
-const animReady = import("./characters-anim.js?v=20261121b")
+const animReady = import("./characters-anim.js?v=20261121c")
   .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
   .catch(() => {});
 const animStates = new Map(); // img要素 -> { id, timers: [] }
