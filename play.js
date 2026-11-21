@@ -5,7 +5,7 @@ import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 // キャラ画像（約200KB）は入室を待たせないよう並行して読み込み、使う直前に待つ
 let CHARA_IMGS = {};
 let charaLoaded = false;
-const charaReady = import("./characters-data.js?v=20261121c")
+const charaReady = import("./characters-data.js?v=20261121d")
   .then((m) => { CHARA_IMGS = m.CHARA_IMGS || {}; charaLoaded = true; })
   .catch(() => { charaLoaded = true; });
 import * as S from "./sound.js?v=20261119k";
@@ -208,7 +208,7 @@ function paintCharaImg(el) {
 // 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
 // タイミングはキャラごとにバラバラにずらす（全員そろってまばたきしないように）。待ち画面・がんばりカード・キャラ選択画面で動く。
 let CHARA_ANIM = {};
-const animReady = import("./characters-anim.js?v=20261121f")
+const animReady = import("./characters-anim.js?v=20261121i")
   .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
   .catch(() => {});
 const animStates = new Map(); // img要素 -> { id, timers: [] }
@@ -248,9 +248,12 @@ function startCharaAnim(el, id) {
     if (!alive()) return;
     const A = CHARA_ANIM[id] || {};
     // 個性コマが2種類あるキャラは、毎回ランダムでどちらかを見せる
-    const f = (A.act && A.act2) ? (Math.random() < 0.5 ? A.act : A.act2) : (A.act || A.act2);
+    const scenes = [A.act, A.act2, A.act3].filter(Boolean);
+    const f = scenes.length ? scenes[Math.floor(Math.random() * scenes.length)] : null;
     if (f && !el.classList.contains("hidden")) playScene(f);
-    later(actLoop, 7000 + Math.random() * 7000);
+    // fast のキャラ（桃太郎・牛若丸・ぷにロボ）は個性コマの間隔を短めにする
+    const base = A.fast ? 3500 : 7000;
+    later(actLoop, base + Math.random() * base);
   };
   animReady.then(() => {
     if (!alive()) return;
