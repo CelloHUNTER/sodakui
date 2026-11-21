@@ -1,46 +1,92 @@
 rules_version = '2';
 
-// そだクイ 本番用セキュリティルール（下書き）
-// 方針: 既定は全拒否。先生は自分のデータだけ。子ども（匿名認証）は参加中の部屋だけ。
-// 注意: 子どもは匿名認証のため「ニックネーム本人」であることはルールでは保証できない。
-//       そのため点数の書き込みは先生だけに限定し、子どもは参加と回答だけができる形にする。
-// デプロイ方法は PRODUCTION.md を参照。これは下書きであり、教室での本番使用前に
-// エミュレータテスト（tests/）を通すこと。
+// そだクイ セキュリティルール（2026-11-21 見直し版。まだ Firebase には反映していない）
+//
+// 方針
+// - 既定は全拒否。先生は自分のデータだけ。子ども（匿名認証）は、自分のものだけ。
+// - 子どもは匿名認証のため、ルールは「ニックネーム本人」を直接は見分けられない。
+//   そこで students/{名前}.ownerUid に「最初に参加した端末のuid」を記録し（紐づけ）、
+//   以後はその端末だけが、その名前の students・players・answers・review を扱える。
+//   紐づけの解除（端末の交換など）は先生の画面から行う（ownerUid を消す）。
+// - 子どもは、自分の students を読める（経験値・ポイントを授業の外でも見せるため）。
+//   書き込みは「紐づけ」と「パートナー（キャラ）の初回選択」だけ。点数は書けない。
+// - 参加できるのは、その部屋の roster に含まれるニックネームだけ。
+// - ポイントを使う（書き込む）仕組みは第2段階で決める。
+//
+// 反映前の注意：teacher.js の「先生ドキュメントの自動作成」は、このルールでは
+// 拒否される（招待制）。反映の前に止めること（PRODUCTION.md 参照）。
+// 手順：Firebase コンソールで反映する（Firebase CLI でのデプロイはしない）。
+// テスト：tests/ をエミュレータで実行する（tests/README は PRODUCTION.md を参照）。
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---------- 共通 ----------
     function signedIn() {
       return request.auth != null;
     }
-    function isTeacher(uid) {
-      return signedIn() && request.auth.uid == uid;
+    function isAnon() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous';
     }
-    function roomTeacher(roomCode) {
-      return get(/databases/$(database)/documents/rooms/$(roomCode)).data.teacherId;
+    // 先生：メール＋パスワードでログイン済み（匿名は除く）、かつ teachers/{uid} が存在する
+    // （存在は管理者がコンソールで手作成する＝招待制）
+    function isTeacher(uid) {
+      return signedIn() && !isAnon() && request.auth.uid == uid
+        && exists(/databases/$(database)/documents/teachers/$(uid));
+    }
+    function roomDoc(code) {
+      return get(/databases/$(database)/documents/rooms/$(code)).data;
+    }
+    function isRoomTeacher(code) {
+      return isTeacher(request.auth.uid) && roomDoc(code).teacherId == request.auth.uid;
+    }
+    // その部屋の先生の students/{nick} に、自分の端末が紐づいている
+    function ownsNick(code, nick) {
+      return isAnon()
+        && get(/databases/$(database)/documents/teachers/$(roomDoc(code).teacherId)/students/$(nick)).data
+             .get('ownerUid', null) == request.auth.uid;
+    }
+    // partner は「未選択→選択」だけ許す（選び直しは先生のリセットのみ）
+    function partnerOk() {
+      let before = resource.data.get('partner', null);
+      let after = request.resource.data.get('partner', null);
+      return after == before
+        || (before == null && after is string && after.size() <= 20);
     }
 
-    // 先生の許可リスト兼プロフィール。作成は管理者（コンソール）だけ。
+    // ---------- 先生 ----------
     match /teachers/{uid} {
       allow get: if isTeacher(uid);
       allow list: if false;
-      allow create: if false; // 招待制: コンソールで手作成する
+      allow create: if false; // 招待制：コンソールで手作成する
       allow update: if isTeacher(uid);
       allow delete: if false;
 
-      // 生徒（ニックネーム）・自作クイズ・記録は、その先生だけ
-      match /students/{docId} {
+      match /students/{nick} {
+        // 先生は読み書き自由
         allow read, write: if isTeacher(uid);
-        // 子どもは自分のパートナー（キャラ）を選ぶため、読み取りと partner だけの更新を許可
-        // （ニックネーム本人かどうかはルールでは保証できない前提。DESIGN.mdの注意を参照）
-        allow get: if signedIn();
-        allow update: if signedIn()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partner']);
+        // 子ども：本人の端末だけが、自分の分を読める（一覧は不可）
+        allow get: if isAnon() && resource.data.get('ownerUid', null) == request.auth.uid;
+        // 子ども：紐づけ（最初に参加した端末だけ。部屋が開いていて、名前が roster に含まれること）
+        allow update: if isAnon()
+          && resource.data.get('ownerUid', null) == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'claimedIn', 'partner'])
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.claimedIn is string
+          && get(/databases/$(database)/documents/rooms/$(request.resource.data.claimedIn)).data.teacherId == uid
+          && get(/databases/$(database)/documents/rooms/$(request.resource.data.claimedIn)).data.status in ['waiting', 'playing']
+          && nick in get(/databases/$(database)/documents/rooms/$(request.resource.data.claimedIn)).data.roster
+          && partnerOk();
+        // 子ども：本人の端末が、パートナー（キャラ）を初めて選ぶ
+        allow update: if isAnon()
+          && resource.data.get('ownerUid', null) == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partner'])
+          && partnerOk();
       }
       match /quizzes/{docId} {
         allow read, write: if isTeacher(uid);
       }
-      // 問題画像（絵本のページ等）。先生が保存し、子どもは参加中のクイズの画像を読む
+      // 問題画像。先生が保存し、子どもは読む（画像IDは推測できない文字列。一覧は不可）
       match /images/{docId} {
         allow read, write: if isTeacher(uid);
         allow get: if signedIn();
@@ -50,39 +96,82 @@ service cloud.firestore {
       }
     }
 
-    // 部屋。子どもは部屋コードを知っていれば中身（答えなしの問題）を読める。
+    // ---------- 部屋 ----------
     match /rooms/{roomCode} {
+      // 部屋コードを知っていれば、答えなしの問題は読める
       allow get: if signedIn();
-      allow list: if false;
-      allow create: if signedIn()
-        && request.auth.token.firebase.sign_in_provider != 'anonymous'
-        && request.resource.data.teacherId == request.auth.uid
-        && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
-      allow update: if signedIn() && resource.data.teacherId == request.auth.uid;
-      allow delete: if signedIn() && resource.data.teacherId == request.auth.uid;
+      // 先生は、自分の部屋だけ一覧できる（復帰用）
+      allow list: if isTeacher(request.auth.uid) && resource.data.teacherId == request.auth.uid;
+      allow create: if isTeacher(request.auth.uid)
+        && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isTeacher(request.auth.uid)
+        && resource.data.teacherId == request.auth.uid
+        && request.resource.data.get('teacherId', resource.data.teacherId) == resource.data.teacherId;
 
-      // 参加者。参加（作成）はログイン済みなら可。点数の更新は先生だけ。
-      // 削除は退出する子ども本人と先生（匿名のため本人確認はできない前提の割り切り）。
-      match /players/{nickname} {
+      // 参加者。roster に含まれる名前を、紐づいた端末だけが作れる。点数の更新は先生だけ。
+      match /players/{nick} {
         allow get, list: if signedIn();
-        allow create: if signedIn();
-        allow update: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
-        allow delete: if signedIn();
+        allow create: if isAnon()
+          && roomDoc(roomCode).status != 'closed'
+          && nick in roomDoc(roomCode).roster
+          && ownsNick(roomCode, nick)
+          && request.resource.data.keys().hasOnly(['joinedAt', 'partner'])
+          && request.resource.data.joinedAt is number;
+        allow update: if isAnon()
+          && ownsNick(roomCode, nick)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['joinedAt', 'partner']);
+        allow update, delete: if isRoomTeacher(roomCode);
+        allow delete: if ownsNick(roomCode, nick);
       }
 
-      // 回答。作成は参加者。読み取りはログイン済み（子どもは再入室時に自分の回答を読み直すため）。
-      // 更新・削除は先生だけ。
+      // 回答。作成だけ（上書き不可）。紐づいた端末が、出題中の問題に1回だけ。
       match /answers/{answerId} {
-        allow get, list: if signedIn();
-        allow create: if signedIn();
-        allow update, delete: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
+        allow get: if isRoomTeacher(roomCode) || ownsNick(roomCode, resource.data.nickname);
+        allow list: if isRoomTeacher(roomCode);
+        allow create: if isAnon()
+          && request.resource.data.keys().hasOnly(['nickname', 'q', 'choice', 'at'])
+          && request.resource.data.nickname is string
+          && request.resource.data.q is int
+          && request.resource.data.choice is int
+          && request.resource.data.choice >= 0 && request.resource.data.choice <= 3
+          && request.resource.data.at is number
+          && answerId == request.resource.data.nickname + '_' + string(request.resource.data.q)
+          && roomDoc(roomCode).status == 'playing'
+          && roomDoc(roomCode).phase == 'question'
+          && request.resource.data.q == roomDoc(roomCode).currentIndex
+          && request.resource.data.nickname in roomDoc(roomCode).roster
+          && ownsNick(roomCode, request.resource.data.nickname);
+        allow update, delete: if isRoomTeacher(roomCode);
       }
 
-      // 復習の進み具合。子どもが自分の分を作成・更新し、採点の書き込みは先生も行う。
+      // ふくしゅうの進み具合。本人の端末が作成・更新する。scored は先生だけが書く。
+      // 点数の元になる correctCount は、ルールでは正しさを確かめられない（上限だけ確認）。
+      // 先生の端末が、answers と keys から再計算して採点すること（teacher.js 側の対応）。
       match /review/{docId} {
-        allow get, list: if signedIn();
-        allow create, update: if signedIn();
-        allow delete: if signedIn() && roomTeacher(roomCode) == request.auth.uid;
+        allow get: if isRoomTeacher(roomCode) || ownsNick(roomCode, resource.data.nickname);
+        allow list: if isRoomTeacher(roomCode);
+        allow create: if isAnon()
+          && roomDoc(roomCode).status == 'finished'
+          && request.resource.data.keys().hasOnly(['nickname', 'quizId', 'title', 'answers', 'correctCount', 'done', 'scored', 'startedAt'])
+          && request.resource.data.nickname in roomDoc(roomCode).roster
+          && ownsNick(roomCode, request.resource.data.nickname)
+          && request.resource.data.quizId == roomDoc(roomCode).quizId
+          && docId == request.resource.data.nickname + '_' + request.resource.data.quizId
+          && request.resource.data.scored == false
+          && request.resource.data.answers is list
+          && request.resource.data.answers.size() <= roomDoc(roomCode).questions.size()
+          && request.resource.data.correctCount is int
+          && request.resource.data.correctCount >= 0
+          && request.resource.data.correctCount <= roomDoc(roomCode).questions.size();
+        allow update: if isAnon()
+          && roomDoc(roomCode).status == 'finished'
+          && ownsNick(roomCode, resource.data.nickname)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'answers', 'correctCount', 'done', 'startedAt'])
+          && request.resource.data.answers.size() <= roomDoc(roomCode).questions.size()
+          && request.resource.data.correctCount is int
+          && request.resource.data.correctCount >= 0
+          && request.resource.data.correctCount <= roomDoc(roomCode).questions.size();
+        allow update, delete: if isRoomTeacher(roomCode);
       }
     }
 

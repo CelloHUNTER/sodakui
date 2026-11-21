@@ -23,6 +23,7 @@
 - [ ] 開発用プロジェクトのデータは本番へ移さない（テストデータのため）
 
 ## 3. ルールテストの自動化（任意・推奨）
+- ローカルでの実行（この環境や手元のPC。ログイン・デプロイは不要）：`cd tests && npm install && npm test`（Java が必要）
 - [ ] GitHub の Web 画面から `.github/workflows/rules-test.yml` を1回置く
   （連携アプリからは .github/workflows 配下を書けない仕様のため。ファイル内容はClaudeが用意する）
 - [ ] 以後はルール変更のたびに `tests/rules.test.mjs` が自動で回る
