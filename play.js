@@ -206,7 +206,7 @@ function paintCharaImg(el) {
 
 // ===== キャラの動き（まばたき・個性コマ）=====
 // 通常は静止。まばたきは2.5〜5秒ごとに約0.15秒、個性コマは7〜14秒ごとに約0.4〜0.8秒だけ差し替える。
-// タイミングはキャラごとにずらす。動くのは待ち画面とがんばりカードの大きなキャラだけ（paintCharaImg経由）。
+// タイミングはキャラごとにバラバラにずらす（全員そろってまばたきしないように）。待ち画面・がんばりカード・キャラ選択画面で動く。
 let CHARA_ANIM = {};
 const animReady = import("./characters-anim.js?v=20261121c")
   .then((m) => { CHARA_ANIM = m.CHARA_ANIM || {}; })
@@ -253,6 +253,7 @@ function startCharaAnim(el, id) {
 async function buildCharaGrid() {
   await charaReady;
   const grid = $("charaGrid");
+  grid.querySelectorAll("img").forEach((el) => stopCharaAnim(el));
   grid.innerHTML = "";
   CHARACTERS.forEach((c) => {
     const b = document.createElement("button");
@@ -260,13 +261,17 @@ async function buildCharaGrid() {
     const im = document.createElement("img");
     im.src = CHARA_IMGS[c.id] || "";
     im.alt = c.name;
+    startCharaAnim(im, c.id);
     const sp = document.createElement("span");
     sp.textContent = c.name;
+    if (c.name.length >= 8) sp.className = "nm-s";
+    else if (c.name.length >= 6) sp.className = "nm-m";
     b.appendChild(im);
     b.appendChild(sp);
     b.addEventListener("click", () => {
       pendingChara = c;
       $("charaConfirmImg").src = CHARA_IMGS[c.id] || "";
+      startCharaAnim($("charaConfirmImg"), c.id);
       $("charaConfirmName").textContent = c.name;
       show("charaConfirmCard");
       S.playClick();
