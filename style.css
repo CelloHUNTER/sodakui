@@ -205,3 +205,5 @@ body.bar-open { padding-bottom: 215px; }
 .status .st-ptsnum { font-size: 38px; font-weight: bold; }
 .home { text-align: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px dashed #ced4da; }
 .ios-note { background: #fff3cd; border: 2px solid #e9c46a; border-radius: 12px; padding: 10px; font-size: 16px; line-height: 1.5; }
+/* 待ち画面の文字は、改行せず1行で出す（狭い画面では、はみ出さないよう文字を小さくする） */
+#waitText { white-space: nowrap; font-size: min(22px, 4.4vw); }
