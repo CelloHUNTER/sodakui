@@ -57,8 +57,13 @@ function currentTotals() {
   const add = room && !room.scored && me ? (me.totalEarned || 0) : 0;
   return { exp: (myStu.exp || 0) + add, pts: (myStu.points || 0) + add };
 }
+// 答え合わせの画面で最後に見せた数値。出題中は、先生が採点を書き込んでも、答え合わせまでは数値を変えない
+// （変えると「こたえたよ」の画面で先に増えて、答え合わせでいったん戻って見える）
+let lastShown = null;
 function paintStatuses() {
-  const t = currentTotals();
+  let t = currentTotals();
+  if (t && room && room.status === "playing" && room.phase === "question" && lastShown) t = lastShown;
+  else if (t) lastShown = t;
   ["waitStatus", "certStatus"].forEach((id) => { if (t) paintStatus($(id), t.exp, t.pts); else hideStatus($(id)); });
 }
 let statusAnimToken = 0;
@@ -547,6 +552,7 @@ function render() {
           // 累積の経験値バーとポイントが、獲得分だけ増える
           $("revealPoints").innerHTML = earned > 0 ? "<span class='pluspop'>+" + earned + "</span> ポイント" : "この もんだいは 0 ポイント";
           animateStatus($("revealStatus"), { exp: t.exp - earned, pts: t.pts - earned }, t, 500);
+          lastShown = t;
         } else {
           $("revealPoints").innerHTML =
             (earned > 0 ? "<span class='pluspop'>+" + earned + "</span> " : "") +

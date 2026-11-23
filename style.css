@@ -207,3 +207,21 @@ body.bar-open { padding-bottom: 215px; }
 .ios-note { background: #fff3cd; border: 2px solid #e9c46a; border-radius: 12px; padding: 10px; font-size: 16px; line-height: 1.5; }
 /* 待ち画面の文字は、改行せず1行で出す（狭い画面では、はみ出さないよう文字を小さくする） */
 #waitText { white-space: nowrap; font-size: min(22px, 4.4vw); }
+/* 答え合わせの画面では、画面の下に切れないよう小さめにする */
+#revealStatus { margin: 6px auto; padding: 8px 12px; }
+#revealStatus .st-label { font-size: 17px; }
+#revealStatus .st-lv { font-size: 22px; }
+#revealStatus .expbar { height: 16px; margin: 4px 0; }
+#revealStatus .st-exp { font-size: 24px; }
+#revealStatus .st-ptsnum { font-size: 30px; }
+#revealStatus .st-pts { margin-top: 2px; padding-top: 4px; }
+/* 高さの低い画面（スマホ）では、答え合わせの画面を詰めて、ポイントの行まで見えるようにする */
+@media (max-height: 760px) {
+  h1 { margin: 4px 0 6px; }
+  .judge-box { padding: 4px 8px 2px; }
+  .judge-mark { font-size: 60px; }
+  .judge-msg { font-size: 32px; margin-top: 4px; }
+  #revealCard .mini-card { margin-top: 8px; padding: 10px; }
+  #revealCard #revealQ { font-size: 18px !important; margin: 4px 0; }
+  #revealCard .big { font-size: 18px; margin: 4px 0; }
+}
