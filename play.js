@@ -738,9 +738,10 @@ async function answerReview(ci) {
   rvState.answers[qi] = ci;
   if (correct) rvState.correct++;
   paintMarks($("rvMarks"), [], []);
+  // 押せなくするのは rvState.locked で行う（disabled にすると灰色になり、正解の目印が見えなくなる）。
+  // 正解の選択肢には、色だけでなく記号（◎）も付ける
   [...$("rvChoices").children].forEach((el, i2) => {
-    el.disabled = true;
-    if (keyArr.includes(i2)) el.classList.add("correct");
+    if (keyArr.includes(i2)) { el.classList.add("correct"); el.textContent = "◎ " + el.textContent; }
     else if (i2 === ci) el.classList.add("dim");
   });
   document.body.className = correct ? "bgok" : "bgng";
