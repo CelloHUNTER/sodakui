@@ -191,3 +191,17 @@ body.bar-open { padding-bottom: 215px; }
 #markBar { transition: transform .25s ease; }
 #markBar.away { transform: translateY(115%); }
 .imgwrap.ed .mark.sel { opacity: .5; }
+
+/* 経験値バー・ポイント（ポケモン風の横向きバー）。ラベル・記号・数字を併用し、色だけに頼らない */
+.status { max-width: 440px; margin: 12px auto; padding: 12px 14px; background: #fff; border: 3px solid #495057; border-radius: 16px; text-align: left; }
+.status .st-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.status .st-label { font-size: 20px; font-weight: bold; }
+.status .st-lv { font-size: 26px; font-weight: bold; }
+.status .expbar { height: 22px; margin: 6px 0; background: #e9ecef; border: 3px solid #495057; border-radius: 14px; overflow: hidden; }
+.status .expfill { height: 100%; width: 0; background: #457b9d; }
+.status .st-next { font-size: 15px; color: #555; }
+.status .st-exp { font-size: 30px; font-weight: bold; }
+.status .st-pts { margin-top: 6px; padding-top: 8px; border-top: 2px dashed #adb5bd; align-items: center; }
+.status .st-ptsnum { font-size: 38px; font-weight: bold; }
+.home { text-align: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px dashed #ced4da; }
+.ios-note { background: #fff3cd; border: 2px solid #e9c46a; border-radius: 12px; padding: 10px; font-size: 16px; line-height: 1.5; }

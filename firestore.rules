@@ -126,7 +126,8 @@ service cloud.firestore {
 
       // 回答。作成だけ（上書き不可）。紐づいた端末が、出題中の問題に1回だけ。
       match /answers/{answerId} {
-        allow get: if isRoomTeacher(roomCode) || ownsNick(roomCode, resource.data.nickname);
+        // まだ無いドキュメントの読み取りは許可（復帰時の「回答はあるか」の確認で必要。中身は無い）
+        allow get: if isRoomTeacher(roomCode) || (isAnon() && resource == null) || ownsNick(roomCode, resource.data.nickname);
         allow list: if isRoomTeacher(roomCode);
         allow create: if isAnon()
           && request.resource.data.keys().hasOnly(['nickname', 'q', 'choice', 'at'])
@@ -148,7 +149,8 @@ service cloud.firestore {
       // 点数の元になる correctCount は、ルールでは正しさを確かめられない（上限だけ確認）。
       // 先生の端末が、answers と keys から再計算して採点すること（teacher.js 側の対応）。
       match /review/{docId} {
-        allow get: if isRoomTeacher(roomCode) || ownsNick(roomCode, resource.data.nickname);
+        // まだ無いドキュメントの読み取りは許可（復帰時の「回答はあるか」の確認で必要。中身は無い）
+        allow get: if isRoomTeacher(roomCode) || (isAnon() && resource == null) || ownsNick(roomCode, resource.data.nickname);
         allow list: if isRoomTeacher(roomCode);
         allow create: if isAnon()
           && roomDoc(roomCode).status == 'finished'

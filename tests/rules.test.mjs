@@ -165,6 +165,8 @@ await check("端末A: ロビー（開始前）の部屋には回答できない"
 await check("端末A: 終了した部屋には回答できない", setDoc(doc(dbA, "rooms", "FIN", "answers", TARO + "_1"), ans(TARO, 1, 1)), false);
 await check("端末A: 自分の回答を読める（復帰用）", getDoc(doc(dbA, "rooms", "PLAY", "answers", TARO + "_1")), true);
 await check("端末B: 他人の回答は読めない", getDoc(doc(dbB, "rooms", "PLAY", "answers", TARO + "_1")), false);
+await check("端末A: まだ無い回答を読める（復帰時の確認。中身は無い）", getDoc(doc(dbA, "rooms", "PLAY", "answers", TARO + "_0")), true);
+await check("端末A: まだ無い回答の読み取りは、中身が無いだけで成功する", (async () => { const s = await getDoc(doc(dbA, "rooms", "PLAY", "answers", TARO + "_2")); if (s.exists()) throw new Error("exists"); })(), true);
 await check("子ども: 回答の一覧は読めない", getDocs(collection(dbA, "rooms", "PLAY", "answers")), false);
 await check("先生: 回答の一覧を読める", getDocs(collection(dbT1, "rooms", "PLAY", "answers")), true);
 await check("子ども: 回答を更新・削除できない", deleteDoc(doc(dbA, "rooms", "PLAY", "answers", TARO + "_1")), false);
@@ -183,6 +185,7 @@ await check("端末A: nickname を書き換えられない", updateDoc(doc(dbA, 
 await check("端末A: 自分の進み具合を読める", getDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz")), true);
 await check("端末B: たろうの進み具合は読めない", getDoc(doc(dbB, "rooms", "FIN", "review", TARO + "_qz")), false);
 await check("子ども: 一覧は読めない", getDocs(collection(dbA, "rooms", "FIN", "review")), false);
+await check("端末B: まだ無いふくしゅうデータを読める（購読の開始時）", getDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz")), true);
 await check("端末B: たろうの名前でふくしゅうを作れない", setDoc(doc(dbB, "rooms", "FIN", "review", TARO + "_qz"), rv(TARO, {})), false);
 await check("端末B: 他人のdocIdには作れない", setDoc(doc(dbB, "rooms", "FIN", "review", TARO + "_x"), rv(HANA, {})), false);
 await check("端末B: scored:true で作れない", setDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz"), rv(HANA, { scored: true })), false);

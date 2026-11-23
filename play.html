@@ -4,9 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>そだクイ あそぶ</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="そだクイ">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com">
-<link rel="stylesheet" href="./style.css?v=20261121d">
+<link rel="stylesheet" href="./style.css?v=20261123a">
 </head>
 <body>
 <div class="wrap">
@@ -17,6 +22,12 @@
   </div>
 
   <div id="codeCard" class="card hidden">
+    <div id="homeCard" class="home hidden">
+      <img id="homeChara" class="chara-mid hidden" alt="">
+      <p id="homeName" class="big"></p>
+      <div id="homeStatus" class="status hidden"></div>
+    </div>
+    <p class="ios-note hidden">ホームがめんの「そだクイ」の アイコンから ひらいてね。（せんせいに きいてね）</p>
     <p class="big center">へやの ばんごうを いれてね</p>
     <input id="roomInput" class="center" style="font-size:32px; letter-spacing:6px; text-transform:uppercase" maxlength="6" placeholder="ABC123">
     <button id="codeBtn" style="width:100%">へやに はいる</button>
@@ -25,7 +36,18 @@
 
   <div id="nickCard" class="card hidden">
     <p class="big center">じぶんの なまえを えらんでね</p>
+    <p class="ios-note hidden">ホームがめんの「そだクイ」の アイコンから ひらくと、じぶんの キャラが ずっと のこるよ。（せんせいに きいてね）</p>
     <div id="nickGrid" class="nickgrid"></div>
+    <p id="nickErr" class="err center"></p>
+  </div>
+
+  <div id="nickConfirmCard" class="card hidden center">
+    <p id="nickConfirmName" class="big" style="font-size:34px"></p>
+    <p class="big">で いい？</p>
+    <p class="note">いちど きめると、せんせいが かえるまで かえられないよ</p>
+    <button id="nickYesBtn" style="width:100%">これで いい</button>
+    <button id="nickNoBtn" class="gray" style="width:100%; margin-top:8px">ちがう（えらびなおす）</button>
+    <p id="claimErr" class="err"></p>
   </div>
 
   <div id="charaCard" class="card hidden">
@@ -45,6 +67,7 @@
     <img id="waitChara" class="chara-big hidden" alt="">
     <p class="big" id="waitText">じゅんびちゅう…</p>
     <p id="waitName"></p>
+    <div id="waitStatus" class="status hidden"></div>
   </div>
 
   <div id="quizCard" class="card hidden">
@@ -66,6 +89,7 @@
     </div>
     <div class="card mini-card center">
       <p id="revealPoints" class="big"></p>
+      <div id="revealStatus" class="status hidden"></div>
       <p id="revealCount"></p>
       <p id="revealRank"></p>
     </div>
@@ -103,6 +127,8 @@
     <p id="certCorrect" class="big"></p>
     <p id="certExp" class="big"></p>
     <p id="certPoints" class="big"></p>
+    <p class="note" style="margin:10px 0 0">ぜんぶで</p>
+    <div id="certStatus" class="status hidden"></div>
     <button id="cardReviewBtn" class="hidden" style="margin-top:12px">まちがえた もんだいを ふくしゅうする</button>
     <p id="cardReviewNote" class="big"></p>
   </div>
@@ -113,6 +139,6 @@
   </div>
 </div>
 <div id="confetti"></div>
-<script type="module" src="./play.js?v=20261121j"></script>
+<script type="module" src="./play.js?v=20261123a"></script>
 </body>
 </html>
