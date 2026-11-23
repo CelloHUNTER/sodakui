@@ -145,21 +145,23 @@ service cloud.firestore {
         allow update, delete: if isRoomTeacher(roomCode);
       }
 
-      // ふくしゅうの進み具合。本人の端末が作成・更新する。scored は先生だけが書く。
-      // 点数の元になる correctCount は、ルールでは正しさを確かめられない（上限だけ確認）。
-      // 先生の端末が、answers と keys から再計算して採点すること（teacher.js 側の対応）。
+      // ふくしゅうの進み具合。本人の端末が作成・更新する。
+      // 子どもが書けるのは、回答（answers）・完了（done）・完了回数（completedCount、1ずつ増やすだけ）など。
+      // 先生の端末だけが書く項目：paid（加点した問題の一覧）、scoredCount（採点した回数）。
+      // 点数は、先生の端末が answers と正解から数え直して付ける（correctCount は信用しない。上限だけ確認）。
       match /review/{docId} {
         // まだ無いドキュメントの読み取りは許可（復帰時の「回答はあるか」の確認で必要。中身は無い）
         allow get: if isRoomTeacher(roomCode) || (isAnon() && resource == null) || ownsNick(roomCode, resource.data.nickname);
         allow list: if isRoomTeacher(roomCode);
         allow create: if isAnon()
           && roomDoc(roomCode).status == 'finished'
-          && request.resource.data.keys().hasOnly(['nickname', 'quizId', 'title', 'answers', 'correctCount', 'done', 'scored', 'startedAt'])
+          && request.resource.data.keys().hasOnly(['nickname', 'quizId', 'title', 'answers', 'correctCount', 'done', 'completedCount', 'startedAt'])
           && request.resource.data.nickname in roomDoc(roomCode).roster
           && ownsNick(roomCode, request.resource.data.nickname)
           && request.resource.data.quizId == roomDoc(roomCode).quizId
           && docId == request.resource.data.nickname + '_' + request.resource.data.quizId
-          && request.resource.data.scored == false
+          && request.resource.data.completedCount == 0
+          && request.resource.data.done == false
           && request.resource.data.answers is list
           && request.resource.data.answers.size() <= roomDoc(roomCode).questions.size()
           && request.resource.data.correctCount is int
@@ -168,7 +170,8 @@ service cloud.firestore {
         allow update: if isAnon()
           && roomDoc(roomCode).status == 'finished'
           && ownsNick(roomCode, resource.data.nickname)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'answers', 'correctCount', 'done', 'startedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'answers', 'correctCount', 'done', 'startedAt', 'completedCount'])
+          && request.resource.data.get('completedCount', 0) in [resource.data.get('completedCount', 0), resource.data.get('completedCount', 0) + 1]
           && request.resource.data.answers.size() <= roomDoc(roomCode).questions.size()
           && request.resource.data.correctCount is int
           && request.resource.data.correctCount >= 0

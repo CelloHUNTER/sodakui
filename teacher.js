@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, onSnapshot, updateDoc, increment, arrayUnion, deleteDoc, deleteField, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 import { CHARA_IMGS } from "./characters-data.js?v=20261121c";
 import * as S from "./sound.js?v=20261119k";
@@ -188,7 +188,7 @@ async function loadNicknames() {
   const snap = await getDocs(collection(db, "teachers", uid, "students"));
   const items = snap.docs
     .filter((d) => d.data().active !== false)
-    .map((d) => ({ name: d.id, participating: d.data().participating !== false, isTest: d.data().isTest === true, partner: d.data().partner || null }))
+    .map((d) => ({ name: d.id, participating: d.data().participating !== false, isTest: d.data().isTest === true, partner: d.data().partner || null, bound: !!d.data().ownerUid }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const box = $("nickList");
   box.innerHTML = "";
@@ -199,7 +199,7 @@ async function loadNicknames() {
     row.className = "nickitem";
     const b = document.createElement("button");
     b.className = "nickbtn" + (it.participating ? "" : " off") + (it.isTest ? " test" : "");
-    b.textContent = it.name + (it.isTest ? "（テスト）" : "");
+    b.textContent = it.name + (it.isTest ? "（テスト）" : "") + (it.bound ? "　[端末と紐づけ済み]" : "");
     if (it.partner && CHARA_IMGS[it.partner]) {
       const im = document.createElement("img");
       im.className = "chip-chara";
@@ -282,6 +282,22 @@ $("delNickBtn").addEventListener("click", async () => {
     await loadNicknames();
   } catch (e) {
     $("nickMsg").textContent = "削除できませんでした: " + (e.code || e.message);
+  }
+});
+
+// 端末の紐づけ（ownerUid）を解除する。iPadの交換・保存データの消去などのとき。数値・キャラ・記録は消えない。
+$("unbindBtn").addEventListener("click", async () => {
+  if (selectedNicks.size === 0) { $("nickMsg").textContent = "紐づけを解除する子を選んでください"; return; }
+  const names = [...selectedNicks];
+  if (!confirm(names.join("、") + " の端末の紐づけを解除します。\n（経験値・ポイント・キャラ・記録は消えません。次に入るとき、新しい端末で名前を選び直せます）\nよろしいですか？")) return;
+  try {
+    for (const n of names) {
+      await updateDoc(doc(db, "teachers", uid, "students", n), { ownerUid: deleteField(), claimedIn: deleteField() });
+    }
+    $("nickMsg").textContent = names.length + "人の端末の紐づけを解除しました（次に入った端末が、新しく紐づきます）";
+    await loadNicknames();
+  } catch (e) {
+    $("nickMsg").textContent = "解除できませんでした: " + (e.code || e.message);
   }
 });
 
@@ -954,29 +970,44 @@ $("csvBtn").addEventListener("click", () => {
 });
 
 // ===== ふくしゅうの採点（がんばりカードからの解き直し） =====
+// 加点は「問題ごとに、解き直しで初めて正解したとき」だけ（1問2点）。何度挑戦しても、同じ問題で2回はもらえない。
+// 正解かどうかは、子どもが書いた correctCount ではなく、回答（answers）と正解を使って、ここで数え直す。
+// 加点済みの問題は paid（問題番号の一覧）に記録する。完了のたびに、記録（records）を1行ずつ残す。
 async function maybeScoreReview(code, id, data) {
-  if (!data.done || data.scored || scoringReview.has(id)) return;
+  const completed = data.completedCount || 0;
+  if (!data.done || completed <= (data.scoredCount || 0) || scoringReview.has(id)) return;
   scoringReview.add(id);
   try {
+    const quiz = await ensureQuiz(data.quizId);
+    if (!quiz) throw new Error("クイズを読めませんでした");
+    const answers = Array.isArray(data.answers) ? data.answers : [];
+    const paid = Array.isArray(data.paid) ? data.paid : [];
+    const detail = [];
+    let attempted = 0, correctNow = 0;
+    const newlyPaid = [];
+    answers.forEach((choice, qi) => {
+      const answered = choice !== null && choice !== undefined;
+      const correct = answered && !!quiz.questions[qi] && answersOf(quiz.questions[qi]).includes(choice);
+      detail.push({ q: qi, choice: answered ? choice : null, correct });
+      if (answered) attempted++;
+      if (correct) { correctNow++; if (!paid.includes(qi)) newlyPaid.push(qi); }
+    });
+    const earned = newlyPaid.length * REVIEW_POINTS;
     const stu = await getDoc(doc(db, "teachers", uid, "students", data.nickname));
     const isTest = stu.exists() && stu.data().isTest === true;
-    const earned = (data.correctCount || 0) * REVIEW_POINTS;
     if (!isTest) {
       if (earned > 0) {
         await setDoc(doc(db, "teachers", uid, "students", data.nickname),
           { exp: increment(earned), points: increment(earned) }, { merge: true });
       }
-      const quiz = await ensureQuiz(data.quizId);
-      const detail = (data.answers || []).map((choice, qi) => ({
-        q: qi, choice, correct: !!(quiz && answersOf(quiz.questions[qi]).includes(choice))
-      }));
-      await setDoc(doc(db, "teachers", uid, "records", code + "_review_" + data.nickname + "_" + data.quizId), {
+      await setDoc(doc(db, "teachers", uid, "records", code + "_review_" + data.nickname + "_" + data.quizId + "_" + completed), {
         date: new Date().toISOString(), roomCode: code, quizId: data.quizId, quizTitle: data.title || "",
-        nickname: data.nickname, correctCount: data.correctCount || 0,
-        totalCount: (data.answers || []).length, earned, mode: "review", detail
+        nickname: data.nickname, correctCount: correctNow, totalCount: attempted, earned, mode: "review",
+        attempt: completed, detail
       });
     }
-    await updateDoc(doc(db, "rooms", code, "review", id), { scored: true });
+    // 加点済みの問題と、採点済みの回数を記録する（テスト用の子も、解き直しの対象が減るよう記録する）
+    await updateDoc(doc(db, "rooms", code, "review", id), { paid: [...paid, ...newlyPaid].sort((x, y) => x - y), scoredCount: completed });
   } catch (e) {
     console.error("ふくしゅう採点に失敗", e);
   } finally {

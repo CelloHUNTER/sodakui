@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js?v=20261119k";
 // キャラ画像（約200KB）は入室を待たせないよう並行して読み込み、使う直前に待つ
 let CHARA_IMGS = {};
@@ -468,6 +468,7 @@ async function joinAs(nick) {
   onSnapshot(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId), (snap) => {
     myReview = {};
     if (snap.exists()) myReview[room.quizId] = snap.data();
+    if (room && (room.status === "finished" || room.status === "closed") && !rvState) paintCardReview();
   }, () => { /* 読めなければ未挑戦として扱う */ });
   return true;
 }
@@ -672,8 +673,10 @@ async function loadHome() {
 // ===== ふくしゅう（がんばりカードから、間違えた問題の解き直し） =====
 const REVIEW_POINTS = 2; // 正解1問あたり（先生側の採点と一致させる）
 let rvState = null;      // {list, pos, answers（全問ぶん）, correct, locked}
-let myReview = {};       // quizId -> 自分の復習の進み具合（scored判定用）
+let myReview = {};       // quizId -> 自分の復習の進み具合（paid＝解き直しで直せた問題の一覧は、先生の端末が書く）
+let myFixed = new Set(); // この画面で、解き直しで正解した問題（先生の採点が付く前でも、出題から外すため）
 
+// 本番で間違えた・答えなかった問題
 function missedIndices() {
   if (!room || !room.keys || !room.questions) return [];
   const out = [];
@@ -684,31 +687,48 @@ function missedIndices() {
   }
   return out;
 }
+// 解き直しで、まだ直せていない問題（2回目以降は、直せた問題を出さない）
+function remainingIndices() {
+  const paid = (myReview[room.quizId] && myReview[room.quizId].paid) || [];
+  return missedIndices().filter((i) => !paid.includes(i) && !myFixed.has(i));
+}
 
 function paintCardReview() {
   const btn = $("cardReviewBtn");
   const note = $("cardReviewNote");
   if (!room || !room.keys) { btn.classList.add("hidden"); note.textContent = ""; return; }
   const missed = missedIndices();
+  const remain = remainingIndices();
   if (missed.length === 0) {
     btn.classList.add("hidden");
     note.textContent = "ぜんぶ せいかい！すごい！";
+  } else if (remain.length === 0) {
+    btn.classList.add("hidden");
+    note.textContent = "まちがえた もんだいを ぜんぶ なおせた！すごい！";
   } else {
     btn.classList.remove("hidden");
-    btn.textContent = "まちがえた もんだいを ふくしゅうする（" + missed.length + "問）";
+    const again = remain.length < missed.length || (myReview[room.quizId] && myReview[room.quizId].completedCount > 0);
+    btn.textContent = again ? "まだ なおせていない もんだいを ふくしゅうする（" + remain.length + "問）" : "まちがえた もんだいを ふくしゅうする（" + remain.length + "問）";
     note.textContent = "";
   }
 }
 
 $("cardReviewBtn").addEventListener("click", async () => {
-  const list = missedIndices();
-  if (list.length === 0 || !room) return;
+  if (!room) return;
+  const list = remainingIndices();
+  if (list.length === 0) return;
   rvState = { list, pos: 0, answers: new Array(room.questions.length).fill(null), correct: 0, locked: false };
+  const ref = doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId);
   try {
-    await setDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId), {
-      nickname, quizId: room.quizId, title: room.quizTitle || "", answers: rvState.answers, correctCount: 0, done: false,
-      scored: (myReview[room.quizId] && myReview[room.quizId].scored) || false, startedAt: Date.now()
-    });
+    if (myReview[room.quizId]) {
+      // 2回目以降：進み具合を新しくする（先生の採点の記録は書き換えない）
+      await updateDoc(ref, { answers: rvState.answers, correctCount: 0, done: false, startedAt: Date.now() });
+    } else {
+      await setDoc(ref, {
+        nickname, quizId: room.quizId, title: room.quizTitle || "", answers: rvState.answers, correctCount: 0, done: false,
+        completedCount: 0, startedAt: Date.now()
+      });
+    }
   } catch (e) { /* 保存に失敗しても復習は続けられる */ }
   renderReviewQuestion();
 });
@@ -742,7 +762,7 @@ async function answerReview(ci) {
   const keyArr = Array.isArray(keyRaw) ? keyRaw : [keyRaw];
   const correct = keyArr.includes(ci);
   rvState.answers[qi] = ci;
-  if (correct) rvState.correct++;
+  if (correct) { rvState.correct++; myFixed.add(qi); }
   paintMarks($("rvMarks"), [], []);
   // 押せなくするのは rvState.locked で行う（disabled にすると灰色になり、正解の目印が見えなくなる）。
   // 正解の選択肢には、色だけでなく記号（◎）も付ける
@@ -773,15 +793,17 @@ $("rvNextBtn").addEventListener("click", async () => {
     renderReviewQuestion();
     return;
   }
-  const wasScored = !!(myReview[room.quizId] && myReview[room.quizId].scored);
   const total = rvState.list.length;
   const correctCount = rvState.correct;
   try {
     await updateDoc(doc(db, "rooms", roomCode, "review", nickname + "_" + room.quizId),
-      { done: true, correctCount, answers: rvState.answers });
+      { done: true, correctCount, answers: rvState.answers, completedCount: increment(1) });
   } catch (e) { /* 同上 */ }
   $("rvResult").textContent = total + "問中 " + correctCount + "問 なおせた！";
-  $("rvPoints").textContent = wasScored ? "ポイントは 1回目だけ もらえます" : "+" + (correctCount * REVIEW_POINTS) + " ポイント（1問 " + REVIEW_POINTS + "点）";
+  // 解き直しで初めて正解した問題だけ、1問2点（先生の端末の採点と一致させる）
+  $("rvPoints").textContent = correctCount > 0
+    ? "+" + (correctCount * REVIEW_POINTS) + " ポイント（なおせた 1問 " + REVIEW_POINTS + "点）"
+    : "つぎは なおせるよ！ なおせた もんだいで ポイントが もらえます";
   rvState = null;
   show("reviewDoneCard");
   S.playFanfare();

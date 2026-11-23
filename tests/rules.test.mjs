@@ -175,11 +175,14 @@ await check("先生: 回答を削除できる", deleteDoc(doc(dbT1, "rooms", "PL
 // ===== ふくしゅう（review） =====
 console.log("\n--- ふくしゅう ---");
 await seed(); await bindTaro(); await bindHana();
-const rv = (n, over) => ({ nickname: n, quizId: "qz", title: "t", answers: [null, null, null], correctCount: 0, done: false, scored: false, startedAt: 1, ...over });
+const rv = (n, over) => ({ nickname: n, quizId: "qz", title: "t", answers: [null, null, null], correctCount: 0, done: false, completedCount: 0, startedAt: 1, ...over });
 await check("端末A: 終了した部屋でふくしゅうを始められる", setDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), rv(TARO, {})), true);
 await check("端末A: 進み具合を更新できる", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { answers: [1, null, null], correctCount: 1 }), true);
-await check("端末A: 完了にできる", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { done: true }), true);
-await check("端末A: scored を自分で true にできない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { scored: true }), false);
+await check("端末A: 完了にできる（完了回数を1増やす）", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { done: true, completedCount: 1 }), true);
+await check("端末A: 完了回数を2つ以上は増やせない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { completedCount: 3 }), false);
+await check("端末A: paid（加点済みの問題）を自分で書けない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { paid: [0, 1, 2] }), false);
+await check("端末A: scoredCount を自分で書けない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { scoredCount: 1 }), false);
+await check("端末A: scored も自分で書けない（古い形式の印）", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { scored: true }), false);
 await check("端末A: 問題数より多い正解数は書けない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { correctCount: 99 }), false);
 await check("端末A: nickname を書き換えられない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { nickname: HANA }), false);
 await check("端末A: 自分の進み具合を読める", getDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz")), true);
@@ -188,12 +191,17 @@ await check("子ども: 一覧は読めない", getDocs(collection(dbA, "rooms",
 await check("端末B: まだ無いふくしゅうデータを読める（購読の開始時）", getDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz")), true);
 await check("端末B: たろうの名前でふくしゅうを作れない", setDoc(doc(dbB, "rooms", "FIN", "review", TARO + "_qz"), rv(TARO, {})), false);
 await check("端末B: 他人のdocIdには作れない", setDoc(doc(dbB, "rooms", "FIN", "review", TARO + "_x"), rv(HANA, {})), false);
-await check("端末B: scored:true で作れない", setDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz"), rv(HANA, { scored: true })), false);
+await check("端末B: 完了回数が0でない状態では作れない", setDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz"), rv(HANA, { completedCount: 5 })), false);
+await check("端末B: paid つきでは作れない", setDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz"), { ...rv(HANA, {}), paid: [0] }), false);
 await check("端末B: 正解数が問題数を超える作成は不可", setDoc(doc(dbB, "rooms", "FIN", "review", HANA + "_qz"), rv(HANA, { correctCount: 50 })), false);
 await check("端末B: ゲーム中の部屋ではふくしゅうを作れない", setDoc(doc(dbB, "rooms", "PLAY", "review", HANA + "_qz"), rv(HANA, {})), false);
 await check("先生: 一覧を読める", getDocs(collection(dbT1, "rooms", "FIN", "review")), true);
-await check("先生: scored を true にできる", updateDoc(doc(dbT1, "rooms", "FIN", "review", TARO + "_qz"), { scored: true }), true);
-await check("端末A: 採点後に、再作成で scored を戻せない", setDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), rv(TARO, {})), false);
+await check("先生: paid と scoredCount を書ける", updateDoc(doc(dbT1, "rooms", "FIN", "review", TARO + "_qz"), { paid: [0], scoredCount: 1 }), true);
+await check("端末A: 採点後に、作り直して完了回数を戻せない", setDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), rv(TARO, {})), false);
+await check("端末A: 2回目：進み具合を新しくできる（paid は触らない）", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { answers: [null, null, null], correctCount: 0, done: false, startedAt: 2 }), true);
+await check("端末A: 2回目の完了（完了回数が2になる）", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { done: true, completedCount: 2, correctCount: 1, answers: [1, null, null] }), true);
+await check("端末A: 完了回数を減らせない", updateDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz"), { completedCount: 0 }), false);
+await check("端末A: 採点後も、自分のデータ（paid）を読める", (async () => { const s = await getDoc(doc(dbA, "rooms", "FIN", "review", TARO + "_qz")); if (!s.data().paid) throw new Error("no paid"); })(), true);
 
 console.log(`\n結果: ${passed} passed, ${failed} failed`);
 await env.cleanup();
