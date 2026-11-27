@@ -54,6 +54,11 @@ let reviewWatchCode = null;
 let reviewCache = {};
 const scoringReview = new Set();
 
+// 子どもが入力した名前などを、画面の部品として差し込むときは、必ずこれを通す（ただの文字として表示するため）
+function esc(v) {
+  return String(v === undefined || v === null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 const quizSelect = $("quizSelect");
 let quizCache = {}; // 自分のクイズ（id -> クイズ本体、答え含む）
 // 正解は複数ありうる。旧形式（answer が1つ）も読み取れるようにする
@@ -159,9 +164,14 @@ onAuthStateChanged(auth, async (user) => {
   if (user && user.isAnonymous) user = null;
   if (user) {
     uid = user.uid;
-    const ref = doc(db, "teachers", uid);
-    if (!(await getDoc(ref)).exists()) {
-      await setDoc(ref, { displayName: user.email, createdAt: Date.now() });
+    // 先生は招待制：先生の登録（teachers/{uid}）が無いアカウントは、先に進めない（自動では作らない）
+    let registered = false;
+    try { registered = (await getDoc(doc(db, "teachers", uid))).exists(); } catch (e) { /* 読めない＝登録なし */ }
+    if (!registered) {
+      uid = null;
+      await signOut(auth);
+      $("loginErr").textContent = "このアカウントは、まだ先生として登録されていません。登録のしかたは、管理者に聞いてください。";
+      return;
     }
     $("loginCard").classList.add("hidden");
     $("mainArea").classList.remove("hidden");
@@ -565,7 +575,7 @@ function renderDisplay() {
       else d.classList.add("dim");
     }
     if (room.hint && room.hint.q === idx && room.hint.hidden.includes(i)) d.classList.add("hinted");
-    d.innerHTML = "<span class='barbg' id='db" + i + "'></span><span>" + SYMBOLS[i] + " " + c + "</span><span class='dcount' id='dc" + i + "'></span>";
+    d.innerHTML = "<span class='barbg' id='db" + i + "'></span><span>" + SYMBOLS[i] + " " + esc(c) + "</span><span class='dcount' id='dc" + i + "'></span>";
     box.appendChild(d);
   });
   $("hintBtn").classList.toggle("hidden", !(room.phase === "question" && !(room.hint && room.hint.q === idx)));
@@ -630,7 +640,7 @@ function renderRanking() {
     prevSorted.forEach((p, i) => {
       const row = document.createElement("div");
       row.className = "rankrow";
-      row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + (p.partner && CHARA_IMGS[p.partner] ? "<img class='chara-icon' src='" + CHARA_IMGS[p.partner] + "'> " : "") + p.nickname +
+      row.innerHTML = "<span><span class='rk'>" + (i + 1) + "位</span>　" + (p.partner && CHARA_IMGS[p.partner] ? "<img class='chara-icon' src='" + CHARA_IMGS[p.partner] + "'> " : "") + esc(p.nickname) +
         (p.lastCorrect ? " <span class='okbadge'>せいかい</span>" : "") + " <span class='delta'></span></span>" +
         "<span>" + ((p.lastEarned || 0) > 0 ? "<span class='plusbadge'>+" + p.lastEarned + "</span> " : "") +
         "<span class='pts'>" + prevTotal(p) + "</span>点</span>";
@@ -675,7 +685,7 @@ function renderRanking() {
   }
   const sorted = [...playersCache].sort((a, b) => (b.totalEarned || 0) - (a.totalEarned || 0));
   list.innerHTML = sorted.map((p, i) =>
-    "<div class='rankrow'><span>" + (i + 1) + "位　" + p.nickname + "</span><span>" +
+    "<div class='rankrow'><span>" + (i + 1) + "位　" + esc(p.nickname) + "</span><span>" +
     (p.correctCount || 0) + "問正解・" + (p.totalEarned || 0) + "点</span></div>").join("");
 }
 
@@ -847,7 +857,7 @@ function renderPodium() {
     sorted.slice(3).forEach((p) => {
       const d = document.createElement("div");
       d.className = "otile";
-      d.innerHTML = "<div class='oname'>" + p.nickname + "</div><div class='opts'>" + (p.totalEarned || 0) + "点</div>";
+      d.innerHTML = "<div class='oname'>" + esc(p.nickname) + "</div><div class='opts'>" + (p.totalEarned || 0) + "点</div>";
       others.appendChild(d);
     });
   } else {
